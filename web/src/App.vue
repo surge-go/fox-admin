@@ -1,24 +1,22 @@
-<script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { createFoxThemeOverrides } from './theme/fox-theme'
-import { useThemeStore } from './stores/theme'
-
-const themeStore = useThemeStore()
-const themeOverrides = computed(() => createFoxThemeOverrides(themeStore.activePalette))
-
-onMounted(() => {
-  themeStore.applyTheme()
-})
-</script>
+<script setup lang="ts"></script>
 
 <template>
-  <n-config-provider :theme-overrides="themeOverrides">
-    <n-message-provider>
-      <n-dialog-provider>
-        <n-notification-provider>
-          <router-view />
-        </n-notification-provider>
-      </n-dialog-provider>
-    </n-message-provider>
-  </n-config-provider>
+  <main class="app">
+    <h1>fox-admin-web</h1>
+  </main>
 </template>
+
+<style scoped>
+.app {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+}
+
+h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 600;
+}
+</style>
+
