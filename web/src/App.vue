@@ -1,9 +1,15 @@
-<script setup lang="ts"></script>
-
 <template>
-  <main class="app">
-    <h1>fox-admin-web</h1>
-  </main>
+  <n-config-provider>
+    <n-message-provider>
+      <main class="app">
+        <n-space vertical align="center" :size="16">
+          <n-h1>fox-admin-web</n-h1>
+          <n-text depth="3">Vue 3 + Vite + TypeScript + Naive UI</n-text>
+          <n-button type="primary">Ready</n-button>
+        </n-space>
+      </main>
+    </n-message-provider>
+  </n-config-provider>
 </template>
 
 <style scoped>
@@ -11,12 +17,6 @@
   display: grid;
   min-height: 100vh;
   place-items: center;
-}
-
-h1 {
-  margin: 0;
-  font-size: 32px;
-  font-weight: 600;
+  padding: 24px;
 }
 </style>
-
