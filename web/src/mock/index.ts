@@ -34,7 +34,14 @@ function joinUrl(baseURL = '', url = ''): string {
     return url
   }
 
-  return `${baseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`
+  const normalizedBaseURL = baseURL.replace(/\/+$/, '')
+  const normalizedUrl = url.replace(/^\/+/, '')
+
+  if (url.startsWith(`${normalizedBaseURL}/`) || url === normalizedBaseURL) {
+    return url
+  }
+
+  return `${normalizedBaseURL}/${normalizedUrl}`
 }
 
 function normalizePath(url?: string): string {

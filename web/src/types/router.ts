@@ -68,4 +68,7 @@ export type Router = {
 
   /** 路由元信息，用于描述菜单展示相关配置 */
   mate: RouterMate
+
+  /** 子路由列表，通常用于目录下挂载多个菜单页面 */
+  children?: Router[]
 }

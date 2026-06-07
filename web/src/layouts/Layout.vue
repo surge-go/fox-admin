@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { defineAsyncComponent, markRaw, type Component } from 'vue'
 import {
+  IconActivityHeartbeat,
   IconBell,
   IconChevronDown,
   IconChevronsLeft,
@@ -11,6 +13,7 @@ import {
   IconLayoutDashboard,
   IconMoon,
   IconSearch,
+  IconServer,
   IconSettings,
   IconShieldCheck,
   IconSun,
@@ -19,12 +22,18 @@ import {
 import type { MenuOption } from 'naive-ui'
 import { darkTheme, dateZhCN, lightTheme, NIcon, zhCN, type GlobalThemeOverrides } from 'naive-ui'
 
-import type { LayoutMenuItem, LayoutTab } from '../types/menu'
+import { useRouterStore } from '../store'
+import type { LayoutMenuItem } from '../types/menu'
+import { RouterType, type Router } from '../types/router'
 
 const collapsed = ref(false)
 const isDark = ref(false)
-const activeMenu = ref('/dashboard')
-const activeTab = ref('/dashboard')
+const routerStore = useRouterStore()
+const activeMenu = routerStore.activeMenu
+const activeTab = routerStore.activeTab
+const activeRoute = routerStore.activeRoute
+const routeList = routerStore.routeList
+const tabs = routerStore.tabs
 
 const theme = computed(() => (isDark.value ? darkTheme : lightTheme))
 
@@ -44,89 +53,22 @@ const themeOverrides: GlobalThemeOverrides = {
   },
 }
 
-const menuItems: LayoutMenuItem[] = [
-  {
-    key: '/dashboard',
-    label: '工作台',
-    icon: IconLayoutDashboard,
-  },
-  {
-    key: '/system',
-    label: '系统管理',
-    icon: IconSettings,
-    children: [
-      {
-        key: '/system/user',
-        label: '用户管理',
-        icon: IconUsers,
-      },
-      {
-        key: '/system/role',
-        label: '角色权限',
-        icon: IconShieldCheck,
-      },
-    ],
-  },
-  {
-    key: '/basic',
-    label: '基础数据',
-    icon: IconDatabase,
-    badge: '12',
-  },
-  {
-    key: '/document',
-    label: '文档中心',
-    icon: IconFileText,
-  },
-]
+const iconMap: Record<string, Component> = {
+  'activity-heartbeat': IconActivityHeartbeat,
+  dashboard: IconLayoutDashboard,
+  server: IconServer,
+  settings: IconSettings,
+  users: IconUsers,
+  'shield-check': IconShieldCheck,
+  database: IconDatabase,
+  'file-text': IconFileText,
+}
 
-const tabs = ref<LayoutTab[]>([
-  {
-    key: '/dashboard',
-    label: '工作台',
-    fixed: true,
-  },
-  {
-    key: '/system/user',
-    label: '用户管理',
-  },
-])
-
-const quickStats = [
-  {
-    label: '在线用户',
-    value: '1,248',
-    trend: '+12.4%',
-  },
-  {
-    label: '今日请求',
-    value: '86,420',
-    trend: '+8.1%',
-  },
-  {
-    label: '异常告警',
-    value: '7',
-    trend: '-3',
-  },
-]
-
-const tasks = [
-  {
-    title: '角色权限矩阵调整',
-    desc: '系统管理 / 角色权限',
-    status: '进行中',
-  },
-  {
-    title: '菜单路由协议联调',
-    desc: '动态路由 / Mock API',
-    status: '待确认',
-  },
-  {
-    title: '登录过期处理',
-    desc: 'HTTP 拦截器 / 401',
-    status: '待开发',
-  },
-]
+const viewModules = import.meta.glob('../views/**/*.vue') as Record<
+  string,
+  () => Promise<{ default: Component }>
+>
+const viewComponentMap = new Map<string, Component>()
 
 function renderIcon(icon?: Component) {
   if (!icon) {
@@ -134,6 +76,46 @@ function renderIcon(icon?: Component) {
   }
 
   return () => h(NIcon, null, { default: () => h(icon) })
+}
+
+function resolveIcon(icon?: string): Component | undefined {
+  if (!icon) {
+    return undefined
+  }
+
+  return iconMap[icon]
+}
+
+function normalizeMenuItem(route: Router): LayoutMenuItem | undefined {
+  if (route.mate.isHide) {
+    return undefined
+  }
+
+  const children = route.children
+    ?.map(normalizeMenuItem)
+    .filter((item): item is LayoutMenuItem => Boolean(item))
+
+  if (route.type === RouterType.Catalog) {
+    return {
+      key: route.path,
+      label: route.mate.title,
+      icon: resolveIcon(route.mate.icon),
+      children,
+    }
+  }
+
+  return {
+    key: route.path,
+    label: route.mate.title,
+    icon: resolveIcon(route.mate.icon),
+    children,
+  }
+}
+
+function toLayoutMenuItems(routes: Router[]) {
+  return routes
+    .map(normalizeMenuItem)
+    .filter((item): item is LayoutMenuItem => Boolean(item))
 }
 
 function toMenuOptions(items: LayoutMenuItem[]): MenuOption[] {
@@ -145,60 +127,53 @@ function toMenuOptions(items: LayoutMenuItem[]): MenuOption[] {
   }))
 }
 
-const menuOptions = computed(() => toMenuOptions(menuItems))
+const menuItems = computed(() => toLayoutMenuItems(routeList.value))
+const menuOptions = computed(() => toMenuOptions(menuItems.value))
+const activeViewComponent = computed(() => {
+  const componentPath = activeRoute.value?.component
+
+  if (!componentPath || isIframeRoute.value) {
+    return null
+  }
+
+  const cachedComponent = viewComponentMap.get(componentPath)
+
+  if (cachedComponent) {
+    return cachedComponent
+  }
+
+  const modulePath = `../views/${componentPath}.vue`
+  const loader = viewModules[modulePath]
+
+  if (!loader) {
+    return null
+  }
+
+  const component = markRaw(defineAsyncComponent(loader))
+  viewComponentMap.set(componentPath, component)
+  return component
+})
 
 function handleMenuUpdate(key: string) {
-  activeMenu.value = key
-  activeTab.value = key
-
-  const target = findMenuItem(menuItems, key)
-
-  if (target && !tabs.value.some((tab) => tab.key === key)) {
-    tabs.value.push({
-      key,
-      label: target.label,
-    })
-  }
-}
-
-function findMenuItem(items: LayoutMenuItem[], key: string): LayoutMenuItem | undefined {
-  for (const item of items) {
-    if (item.key === key) {
-      return item
-    }
-
-    const child = item.children ? findMenuItem(item.children, key) : undefined
-
-    if (child) {
-      return child
-    }
-  }
-
-  return undefined
+  routerStore.openTab(key)
 }
 
 function handleCloseTab(key: string) {
-  const tab = tabs.value.find((item) => item.key === key)
-
-  if (tab?.fixed) {
-    return
-  }
-
-  tabs.value = tabs.value.filter((item) => item.key !== key)
-
-  if (activeTab.value === key) {
-    const nextTab = tabs.value[tabs.value.length - 1]
-
-    if (nextTab) {
-      activeTab.value = nextTab.key
-      activeMenu.value = nextTab.key
-    }
-  }
+  routerStore.closeTab(key)
 }
+
+const isIframeRoute = computed(() => Boolean(activeRoute.value?.mate.link && !activeRoute.value?.mate.isExternal))
+const isMissingLocalView = computed(() => {
+  return Boolean(activeRoute.value && !isIframeRoute.value && !activeViewComponent.value)
+})
 
 function toggleCollapsed() {
   collapsed.value = !collapsed.value
 }
+
+onMounted(() => {
+  void routerStore.loadRoutes()
+})
 </script>
 
 <template>
@@ -332,11 +307,12 @@ function toggleCollapsed() {
 
               <div class="tab-strip">
                 <n-tabs
-                  v-model:value="activeTab"
+                  :value="activeTab"
                   animated
+                  @close="handleCloseTab"
                   size="small"
                   type="card"
-                  @update:value="activeMenu = $event"
+                  @update:value="routerStore.setActiveTab($event)"
                 >
                   <n-tab-pane
                     v-for="tab in tabs"
@@ -344,66 +320,54 @@ function toggleCollapsed() {
                     :closable="!tab.fixed"
                     :name="tab.key"
                     :tab="tab.label"
-                    @close="handleCloseTab(tab.key)"
                   />
                 </n-tabs>
               </div>
 
               <n-layout-content class="admin-content" :native-scrollbar="false">
                 <div class="workspace">
-                  <section class="page-heading">
-                    <div>
-                      <p>Overview</p>
-                      <h1>工作台</h1>
-                    </div>
-                    <n-space>
-                      <n-button secondary>导出</n-button>
-                      <n-button type="primary">新建任务</n-button>
-                    </n-space>
-                  </section>
-
-                  <section class="stats-grid">
-                    <n-card v-for="item in quickStats" :key="item.label" class="metric-card">
-                      <div class="metric-card__label">{{ item.label }}</div>
-                      <div class="metric-card__body">
-                        <strong>{{ item.value }}</strong>
-                        <n-tag :type="item.trend.startsWith('-') ? 'warning' : 'success'" size="small">
-                          {{ item.trend }}
+                  <template v-if="activeRoute">
+                    <section v-if="isIframeRoute" class="iframe-page">
+                      <div class="iframe-page__header">
+                        <div>
+                          <p>{{ activeRoute.path }}</p>
+                          <h1>{{ activeRoute.mate.title }}</h1>
+                        </div>
+                        <n-tag size="small" type="info">
+                          iframe
                         </n-tag>
                       </div>
-                    </n-card>
-                  </section>
+                      <iframe
+                        class="iframe-page__frame"
+                        :src="activeRoute.mate.link"
+                        :title="activeRoute.mate.title"
+                      />
+                    </section>
 
-                  <section class="content-grid">
-                    <n-card title="待办事项">
-                      <n-list hoverable>
-                        <n-list-item v-for="item in tasks" :key="item.title">
-                          <n-thing :description="item.desc" :title="item.title">
-                            <template #header-extra>
-                              <n-tag size="small">{{ item.status }}</n-tag>
-                            </template>
-                          </n-thing>
-                        </n-list-item>
-                      </n-list>
-                    </n-card>
+                    <template v-else>
+                      <KeepAlive>
+                        <component
+                          :is="activeViewComponent"
+                          v-if="activeRoute.mate.keepAlive && activeViewComponent"
+                          :key="activeRoute.path"
+                          :route="activeRoute"
+                        />
+                      </KeepAlive>
 
-                    <n-card title="系统状态">
-                      <n-space vertical :size="18">
-                        <div class="health-row">
-                          <span>API 网关</span>
-                          <n-progress :percentage="98" :show-indicator="false" type="line" />
-                        </div>
-                        <div class="health-row">
-                          <span>任务队列</span>
-                          <n-progress :percentage="76" :show-indicator="false" type="line" />
-                        </div>
-                        <div class="health-row">
-                          <span>缓存命中</span>
-                          <n-progress :percentage="91" :show-indicator="false" type="line" />
-                        </div>
-                      </n-space>
-                    </n-card>
-                  </section>
+                      <component
+                        :is="activeViewComponent"
+                        v-if="!activeRoute.mate.keepAlive && activeViewComponent"
+                        :key="activeRoute.path"
+                        :route="activeRoute"
+                      />
+
+                      <n-card v-if="isMissingLocalView" class="missing-view-card" title="页面未找到">
+                        <p class="missing-view-card__text">
+                          未找到与 <code>{{ activeRoute.component }}</code> 对应的视图文件。
+                        </p>
+                      </n-card>
+                    </template>
+                  </template>
                 </div>
               </n-layout-content>
             </n-layout>
@@ -832,6 +796,52 @@ function toggleCollapsed() {
   max-width: 1440px;
   padding: 20px;
   transition: padding var(--shell-motion-duration-fast) ease;
+}
+
+.iframe-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: calc(100vh - 137px);
+}
+
+.iframe-page__header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.iframe-page__header p {
+  color: var(--shell-muted-color);
+  font-size: 12px;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.iframe-page__header h1 {
+  color: var(--shell-heading-color);
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.iframe-page__frame {
+  background: #fff;
+  border: 1px solid var(--n-border-color);
+  border-radius: 8px;
+  flex: 1;
+  min-height: 720px;
+  width: 100%;
+}
+
+.missing-view-card :deep(.n-card__content) {
+  padding: 18px;
+}
+
+.missing-view-card__text {
+  color: var(--shell-subtle-color);
+  margin: 0;
 }
 
 .page-heading {

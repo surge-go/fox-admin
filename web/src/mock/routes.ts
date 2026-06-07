@@ -86,6 +86,91 @@ const menuList: Router[] = [
       title: '系统管理',
       icon: 'settings',
     },
+    children: [
+      {
+        id: 21,
+        path: '/system/user',
+        name: 'SystemUser',
+        type: RouterType.Menu,
+        component: 'system/user/index',
+        mate: {
+          title: '用户管理',
+          icon: 'users',
+        },
+      },
+      {
+        id: 22,
+        path: '/system/role',
+        name: 'SystemRole',
+        type: RouterType.Menu,
+        component: 'system/role/index',
+        mate: {
+          title: '角色权限',
+          icon: 'shield-check',
+        },
+      },
+    ],
+  },
+  {
+    id: 3,
+    path: '/basic',
+    name: 'BasicData',
+    type: RouterType.Menu,
+    component: 'basic/index',
+    mate: {
+      title: '基础数据',
+      icon: 'database',
+    },
+  },
+  {
+    id: 4,
+    path: '/document',
+    name: 'DocumentCenter',
+    type: RouterType.Menu,
+    component: 'document/index',
+    mate: {
+      title: '文档中心',
+      icon: 'file-text',
+      isExternal: true,
+      link: 'https://www.naiveui.com/zh-CN/os-theme/components',
+    },
+  },
+  {
+    id: 5,
+    path: '/status',
+    name: 'StatusDirectory',
+    type: RouterType.Catalog,
+    component: 'layout',
+    mate: {
+      title: '状态目录',
+      icon: 'activity-heartbeat',
+    },
+    children: [
+      {
+        id: 51,
+        path: '/status/system',
+        name: 'SystemStatus',
+        type: RouterType.Menu,
+        component: 'status/system/index',
+        mate: {
+          title: '系统状态',
+          icon: 'server',
+          keepAlive: true,
+        },
+      },
+      {
+        id: 52,
+        path: '/status/board',
+        name: 'StatusBoard',
+        type: RouterType.Menu,
+        component: 'status/board/index',
+        mate: {
+          title: '监控看板',
+          icon: 'activity-heartbeat',
+          link: '/embedded/status-board.html',
+        },
+      },
+    ],
   },
 ]
 
