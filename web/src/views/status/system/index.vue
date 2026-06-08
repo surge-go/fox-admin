@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import type { Router } from '../../../types/router'
+import type { RouteParams, Router } from '../../../types/router'
 import RoutePage from '../../shared/RoutePage.vue'
 
 defineProps<{
   route: Router
+  fullPath: string
+  params: RouteParams
 }>()
 
 const metrics = [
@@ -15,6 +17,8 @@ const metrics = [
 
 <template>
   <RoutePage
+    :full-path="fullPath"
+    :params="params"
     :route="route"
     accent="#0891b2"
     description="系统状态页已由 component 字段动态加载，同时开启 keepAlive，适合承载实时监控卡片。"

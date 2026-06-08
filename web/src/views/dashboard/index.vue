@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import type { Router } from '../../types/router'
+import type { RouteParams, Router } from '../../types/router'
 import RoutePage from '../shared/RoutePage.vue'
 
 defineProps<{
   route: Router
+  fullPath: string
+  params: RouteParams
 }>()
 
 const metrics = [
@@ -15,6 +17,8 @@ const metrics = [
 
 <template>
   <RoutePage
+    :full-path="fullPath"
+    :params="params"
     :route="route"
     accent="#16a34a"
     description="工作台页面已通过 component 字段动态加载，可作为首页和固定标签页入口。"

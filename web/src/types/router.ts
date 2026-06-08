@@ -16,6 +16,18 @@ export type RouterAction = {
   code: string
 }
 
+/** 路由参数集合，通常用于 /detail/:id 这类动态路径 */
+export type RouteParams = Record<string, string>
+
+/** 页面缓存键策略 */
+export enum RouterCacheBy {
+  /** 按模板路径缓存，例如 /system/user/detail/:id */
+  Path = 'path',
+
+  /** 按实际完整路径缓存，例如 /system/user/detail/1001 */
+  FullPath = 'fullPath',
+}
+
 /** 路由元信息，用于描述菜单展示、标签页、缓存、权限和外链等配置 */
 export type RouterMate = {
   /** 路由标题，通常用于菜单、面包屑和标签页展示 */
@@ -39,14 +51,23 @@ export type RouterMate = {
   /** 是否缓存页面，通常配合 keep-alive 使用 */
   keepAlive?: boolean
 
+  /** 缓存键策略；开启缓存后可控制按模板路径还是按完整路径缓存 */
+  cacheBy?: RouterCacheBy
+
   /** 是否固定标签页，常用于首页、工作台等固定 Tab */
   fixedTab?: boolean
+
+  /** 是否只保留一个标签页实例；再次打开同模板路由时复用现有 Tab */
+  singleTab?: boolean
 
   /** 外部链接地址，用于跳转站外页面或 iframe 页面 */
   link?: string
 
   /** 是否外链跳转；为 true 时直接跳转，默认为 iframe 内嵌展示 */
   isExternal?: boolean
+
+  /** 当前路由激活时需要高亮的菜单路径，常用于隐藏详情页回显父级菜单 */
+  activeMenu?: string
 }
 
 /** 路由菜单类型 */

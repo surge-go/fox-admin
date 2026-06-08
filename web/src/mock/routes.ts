@@ -1,5 +1,6 @@
 import type { ApiResult } from '../api/http'
-import { RouterType, type Router } from '../types/router'
+import type { AppSettings } from '../types/app'
+import { RouterCacheBy, RouterType, type Router } from '../types/router'
 
 type MockMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
@@ -62,6 +63,11 @@ type UserProfile = {
   permissions: string[]
 }
 
+const appSettings: AppSettings = {
+  title: 'A Fox Admin',
+  titleSuffix: 'Fox Admin',
+}
+
 const menuList: Router[] = [
   {
     id: 1,
@@ -96,6 +102,21 @@ const menuList: Router[] = [
         mate: {
           title: '用户管理',
           icon: 'users',
+        },
+      },
+      {
+        id: 23,
+        path: '/system/user/detail/:id',
+        name: 'SystemUserDetail',
+        type: RouterType.Menu,
+        component: 'system/user/detail/index',
+        mate: {
+          title: '用户详情',
+          isHide: true,
+          activeMenu: '/system/user',
+          keepAlive: true,
+          cacheBy: RouterCacheBy.Path,
+          singleTab: true,
         },
       },
       {
@@ -175,6 +196,15 @@ const menuList: Router[] = [
 ]
 
 export const mockRoutes: MockRoute[] = [
+  {
+    path: '/api/app/settings',
+    method: 'GET',
+    response: () => ({
+      code: 200,
+      message: '获取应用配置成功',
+      data: appSettings,
+    }),
+  },
   {
     path: '/api/auth/login',
     method: 'POST',

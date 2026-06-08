@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import type { Router } from '../../types/router'
+import type { RouteParams, Router } from '../../types/router'
 import RoutePage from '../shared/RoutePage.vue'
 
 defineProps<{
   route: Router
+  fullPath: string
+  params: RouteParams
 }>()
 
 const metrics = [
@@ -15,6 +17,8 @@ const metrics = [
 
 <template>
   <RoutePage
+    :full-path="fullPath"
+    :params="params"
     :route="route"
     accent="#ea580c"
     description="基础数据页已按 component 动态分发，适合继续拆成字典、组织、区域等业务模块。"

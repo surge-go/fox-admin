@@ -55,6 +55,19 @@ type InternalRequestConfig = InternalAxiosRequestConfig & {
 
 const TOKEN_KEY = 'fox-admin-token'
 
+function getStoredToken() {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+
+  try {
+    return window.localStorage.getItem(TOKEN_KEY) || ''
+  }
+  catch {
+    return ''
+  }
+}
+
 /** Axios 底层实例 */
 export const httpInstance: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/',
@@ -72,7 +85,7 @@ if (import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === 'true') {
 
 httpInstance.interceptors.request.use((config: InternalRequestConfig) => {
   if (!config.skipAuth) {
-    const token = localStorage.getItem(TOKEN_KEY)
+    const token = getStoredToken()
 
     if (token) {
       config.headers.set('Authorization', `Bearer ${token}`)

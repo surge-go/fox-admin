@@ -23,10 +23,15 @@ export type LayoutTab = {
   /** 标签页唯一值 */
   key: string
 
+  /** 路由模板路径，例如：/system/user/detail/:id */
+  path: string
+
+  /** 当前标签的实际完整路径，例如：/system/user/detail/1001 */
+  fullPath: string
+
   /** 标签页标题 */
   label: string
 
   /** 是否固定 */
   fixed?: boolean
 }
-
