@@ -18,8 +18,8 @@ type SysDictData struct {
 	Value string `gorm:"column:dict_value;type:varchar(120);not null;uniqueIndex:uk_system_dict_data_type_value,priority:2"`
 	// Sort 是同类型字典排序值。
 	Sort *int `gorm:"column:sort;not null;default:0;index:idx_system_dict_data_type_sort,priority:2"`
-	// Status 是字典数据状态。
-	Status *string `gorm:"column:status;type:varchar(32);not null;default:enabled;index"`
+	// Status 是字典数据状态，1 表示启用，0 表示禁用。
+	Status *int `gorm:"column:status;not null;default:1;index"`
 	// IsDefault 表示是否为默认字典项。
 	IsDefault *bool `gorm:"column:is_default;not null;default:false"`
 	// Remark 是字典数据备注。

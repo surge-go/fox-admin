@@ -26,8 +26,8 @@ type SysDept struct {
 	Email *string `gorm:"column:email;type:varchar(255)"`
 	// Sort 是同级部门排序值。
 	Sort *int `gorm:"column:sort;not null;default:0;index:idx_system_dept_parent_sort,priority:2"`
-	// Status 是部门状态。
-	Status *string `gorm:"column:status;type:varchar(32);not null;default:enabled;index"`
+	// Status 是部门状态，1 表示启用，0 表示禁用。
+	Status *int `gorm:"column:status;not null;default:1;index"`
 	// Remark 是部门备注。
 	Remark *string `gorm:"column:remark;type:varchar(255)"`
 	// CreatedAt 是创建时间。

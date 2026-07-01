@@ -26,8 +26,8 @@ type SysUser struct {
 	Gender *string `gorm:"column:gender;type:varchar(32)"`
 	// DeptID 是用户所属部门 ID。
 	DeptID *int64 `gorm:"column:dept_id;index"`
-	// Status 是用户状态。
-	Status *string `gorm:"column:status;type:varchar(32);not null;default:enabled;index"`
+	// Status 是用户状态，1 表示启用，0 表示禁用。
+	Status *int `gorm:"column:status;not null;default:1;index"`
 	// Remark 是用户备注。
 	Remark *string `gorm:"column:remark;type:varchar(255)"`
 	// CreatedAt 是创建时间。

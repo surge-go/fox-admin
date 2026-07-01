@@ -1,0 +1,207 @@
+fox:
+  mode: debug
+  addr: ":8080"
+  read_timeout: 15s
+  write_timeout: 15s
+  shutdown_timeout: 30s
+  max_header_bytes: 1048576
+  max_multipart_memory: 33554432
+  tls: null
+  trusted_proxies: []
+  print_routes: true
+  enable_logger: null
+  use_h2c: false
+
+auth:
+  token_secret: "fox-admin-local-secret"
+  issuer: fox-admin
+  audience: fox-admin-admin
+  key_prefix: "fox-admin:auth:{auth}"
+  access_ttl: 30m
+  refresh_ttl: 168h
+  session_ttl: 168h
+  max_session_ttl: 720h
+  refresh_rotation: true
+  revoke_session_on_refresh_reuse: false
+  policy:
+    max_sessions: 0
+    default_platform:
+      enabled: true
+      max_sessions: 0
+      require_device_id: false
+      kickout_strategy: oldest
+      exclusive_with: []
+    platforms:
+      web:
+        enabled: true
+        max_sessions: 0
+        require_device_id: false
+        kickout_strategy: oldest
+        exclusive_with: []
+      h5:
+        enabled: true
+        max_sessions: 0
+        require_device_id: false
+        kickout_strategy: oldest
+        exclusive_with: []
+      android:
+        enabled: true
+        max_sessions: 1
+        require_device_id: true
+        kickout_strategy: oldest
+        exclusive_with:
+          - ios
+      ios:
+        enabled: true
+        max_sessions: 1
+        require_device_id: true
+        kickout_strategy: oldest
+        exclusive_with:
+          - android
+      miniapp:
+        enabled: true
+        max_sessions: 0
+        require_device_id: false
+        kickout_strategy: oldest
+        exclusive_with: []
+
+logger:
+  level: debug
+  format: json
+  output: stdout
+  file: ""
+  error_output: stderr
+  development: true
+  add_caller: true
+  caller_skip: 0
+  stacktrace_level: error
+  initial_fields:
+    service: fox-admin
+    env: local
+  encoder:
+    message_key: msg
+    level_key: level
+    time_key: ts
+    name_key: logger
+    caller_key: caller
+    function_key: ""
+    stacktrace_key: stacktrace
+    line_ending: ""
+    time_encoding: datetime
+    duration_encoding: seconds
+    level_encoding: lowercase
+  rotation: null
+  sampling:
+    enabled: false
+    initial: 100
+    thereafter: 100
+
+tracing:
+  service:
+    name: fox-admin
+    namespace: surge
+    version: dev
+    instance_id: local
+    environment: local
+  exporter: otlp_http
+  otlp:
+    endpoint: "http://127.0.0.1:4318"
+    insecure: true
+    headers: {}
+    timeout: 5s
+    compression: none
+  sampler:
+    type: parent_based_always_on
+    ratio: 1
+  resource:
+    attributes:
+      service_group: fox-admin
+  batch:
+    max_queue_size: 2048
+    batch_timeout: 5s
+    export_timeout: 30s
+    max_export_batch_size: 512
+
+redis:
+  mode: standalone
+  addrs:
+    - "127.0.0.1:6379"
+  network: tcp
+  db: 0
+  username: ""
+  password: ""
+  client_name: fox-admin
+  protocol: 3
+  disable_identity: false
+  identity_suffix: fox-admin
+  unstable_resp3: false
+  timeout:
+    dial_timeout: 5s
+    dialer_retries: 3
+    dialer_retry_timeout: 100ms
+    read_timeout: 3s
+    write_timeout: 3s
+    pool_timeout: 4s
+    context_timeout_enabled: true
+  retry:
+    max_retries: 3
+    min_retry_backoff: 8ms
+    max_retry_backoff: 512ms
+  pool:
+    fifo: false
+    size: 20
+    max_concurrent_dials: 0
+    min_idle_conns: 2
+    max_idle_conns: 10
+    max_active_conns: 50
+    conn_max_idle_time: 30m
+    conn_max_lifetime: 0s
+    conn_max_lifetime_jitter: 0s
+  buffer:
+    read_buffer_size: 32768
+    write_buffer_size: 32768
+  tls: null
+  monitoring:
+    tracing_enabled: false
+    metrics_enabled: false
+  sentinel: null
+  cluster: null
+
+database:
+  driver: mysql
+  dsn: "root:wui11413@tcp(127.0.0.1:3306)/fox?charset=utf8mb4&parseTime=True&loc=Local"
+  pool:
+    max_open_conns: 20
+    max_idle_conns: 10
+    conn_max_lifetime: 1h
+    conn_max_idle_time: 10m
+  gorm:
+    skip_default_transaction: false
+    dry_run: false
+    prepare_stmt: false
+    disable_nested_transaction: false
+    allow_global_update: false
+    disable_automatic_ping: false
+  naming:
+    table_prefix: ""
+    singular_table: true
+    no_lower_case: false
+    identifier_max_length: 64
+  logger:
+    level: warn
+    log_sql: true
+    slow_threshold: 200ms
+    ignore_record_not_found_error: true
+    parameterized_queries: true
+    colorful: false
+  migration:
+    auto_migrate: true
+    disable_foreign_key_constraint_when_migrating: true
+  monitoring:
+    tracing_enabled: false
+    metrics_enabled: false
+  resolver:
+    sources: []
+    replicas: []
+    policy: random
+    trace_resolver_mode: false

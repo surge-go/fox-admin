@@ -16,8 +16,8 @@ type SysPost struct {
 	Code string `gorm:"column:code;type:varchar(120);not null;uniqueIndex:uk_system_post_code,priority:1"`
 	// Sort 是岗位排序值。
 	Sort *int `gorm:"column:sort;not null;default:0;index"`
-	// Status 是岗位状态。
-	Status *string `gorm:"column:status;type:varchar(32);not null;default:enabled;index"`
+	// Status 是岗位状态，1 表示启用，0 表示禁用。
+	Status *int `gorm:"column:status;not null;default:1;index"`
 	// Remark 是岗位备注。
 	Remark *string `gorm:"column:remark;type:varchar(255)"`
 	// CreatedAt 是创建时间。

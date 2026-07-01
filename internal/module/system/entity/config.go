@@ -22,8 +22,8 @@ type SysConfig struct {
 	ValueType *string `gorm:"column:value_type;type:varchar(32);not null;default:string"`
 	// IsBuiltin 表示是否为系统内置配置。
 	IsBuiltin *bool `gorm:"column:is_builtin;not null;default:false;index"`
-	// Status 是配置状态。
-	Status *string `gorm:"column:status;type:varchar(32);not null;default:enabled;index"`
+	// Status 是配置状态，1 表示启用，0 表示禁用。
+	Status *int `gorm:"column:status;not null;default:1;index"`
 	// Remark 是配置备注。
 	Remark *string `gorm:"column:remark;type:varchar(255)"`
 	// CreatedAt 是创建时间。

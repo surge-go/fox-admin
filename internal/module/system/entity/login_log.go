@@ -20,8 +20,8 @@ type SysLoginLog struct {
 	OS *string `gorm:"column:os;type:varchar(120)"`
 	// UserAgent 是完整 User-Agent。
 	UserAgent *string `gorm:"column:user_agent;type:varchar(500)"`
-	// Status 是登录状态。
-	Status string `gorm:"column:status;type:varchar(32);not null;index"`
+	// Status 是登录状态，1 表示成功，0 表示失败。
+	Status int `gorm:"column:status;not null;index"`
 	// Message 是登录结果说明。
 	Message *string `gorm:"column:message;type:varchar(255)"`
 	// CreatedAt 是创建时间。

@@ -8,3 +8,9 @@ Thumbs.db
 
 # Claude
 .claude/
+
+# Go build output
+*.exe
+*.test
+*.out
+/fox-admin

@@ -26,8 +26,8 @@ type SysOperLog struct {
 	UserAgent *string `gorm:"column:user_agent;type:varchar(500)"`
 	// RequestData 是脱敏后的请求数据摘要。
 	RequestData *string `gorm:"column:request_data;type:text"`
-	// Status 是操作状态。
-	Status string `gorm:"column:status;type:varchar(32);not null;index"`
+	// Status 是操作状态，1 表示成功，0 表示失败。
+	Status int `gorm:"column:status;not null;index"`
 	// StatusCode 是响应状态码。
 	StatusCode *int `gorm:"column:status_code;index"`
 	// CostMillis 是请求耗时，单位毫秒。

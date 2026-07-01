@@ -14,8 +14,8 @@ type SysDictType struct {
 	Name string `gorm:"column:name;type:varchar(120);not null;uniqueIndex:uk_system_dict_type_name,priority:1"`
 	// Code 是字典类型编码。
 	Code string `gorm:"column:code;type:varchar(120);not null;uniqueIndex:uk_system_dict_type_code,priority:1"`
-	// Status 是字典类型状态。
-	Status *string `gorm:"column:status;type:varchar(32);not null;default:enabled;index"`
+	// Status 是字典类型状态，1 表示启用，0 表示禁用。
+	Status *int `gorm:"column:status;not null;default:1;index"`
 	// Remark 是字典类型备注。
 	Remark *string `gorm:"column:remark;type:varchar(255)"`
 	// CreatedAt 是创建时间。
