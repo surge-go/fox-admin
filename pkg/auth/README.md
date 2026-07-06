@@ -118,7 +118,7 @@ auth.Subject{
 }
 ```
 
-`Provider` 表示登录凭证来源，当前内置 `ProviderLocal`，后续可扩展微信、OAuth、LDAP 等来源。
+`Provider` 表示登录凭证来源，当前内置 `ProviderLocal`，后续可扩展微信、OAuth、LDAP 等来源。`Issue` 会在入口将 `LoginContext.Subject.Provider` 的空值自动填充为 `ProviderLocal`，因此调用方不显式传 `Provider` 也能正常登录。
 
 ### Platform
 
@@ -131,6 +131,8 @@ auth.Subject{
 - `PlatformMiniApp`
 
 登录时平台会去空格并转小写。未知平台会返回 `ErrPlatformInvalid`，避免调用方通过伪造平台名绕过设备 ID、最大 session 数或平台互斥策略。
+
+`SubjectType`（`SubjectAdmin` / `SubjectMember`）和 `Platform` 都会在登录入口标准化为小写，并直接拼到 Redis key 中（例如 `{prefix}:subject_sessions:admin:1`、`{prefix}:platform_sessions:admin:1:web`）。后续扩展 `SubjectType` 时，应保证枚举值是稳定的小写字符串，避免对历史 key 产生破坏。
 
 ### TokenPair
 
@@ -175,7 +177,9 @@ type TokenPair struct {
 
 `Refresh(ctx, refreshToken)` 使用 refresh token 轮换并返回新的 `TokenPair`。
 
-默认启用 refresh token rotation。旧 refresh token 被再次使用时返回 `ErrRefreshTokenReused`，并触发 `RefreshReusedEvent`。如果配置 `RevokeSessionOnRefreshReuse` 为 `true`，包会同时吊销对应 session。
+默认启用 refresh token rotation。旧 refresh token 被再次使用时返回 `ErrRefreshTokenReused`，并触发 `RefreshReusedEvent`。如果配置 `RevokeSessionOnRefreshReuse` 为 `true`，包会同时吊销对应 session，并通过 `SessionRevokedEvent.Reason = RevokeReasonRefreshReuse` 通知。
+
+当 `Config.RefreshRotation` 显式置 `false` 时，`Refresh` 不会轮换 refresh token，新 `TokenPair.RefreshToken` 与旧值相同；旧 refresh token 在 session 未过期前可继续使用，不会触发 `ErrRefreshTokenReused`。此时仍会刷新 session 的 `ExpiresAt` 和 `LastRefreshedAt`，但不会写 `refresh_reuse:{hash}`。
 
 ### RevokeSession
 
@@ -238,6 +242,30 @@ auth.SessionPolicy{
 - `KickoutLatest`：拒绝本次登录，返回 `ErrLoginConflict`。
 - `KickoutAll`：踢掉命中范围内全部旧 session。
 
+`ExclusiveWith` 是**单向声明**：仅当平台 A 的 `ExclusiveWith` 包含 B 时，A 登录才会触发踢掉 B 已存在的 session。若只声明 `PlatformIOS.ExclusiveWith = [PlatformAndroid]`，Android 侧未声明，则 iOS 登录会踢掉 Android，但 Android 登录不会踢掉 iOS。需要互斥登录的两个平台必须**双向声明**对方。
+
+策略合并规则（`normalizeSessionPolicy`）：
+
+- 平台级 `KickoutStrategy` 为空时继承 `DefaultPlatformPolicy.KickoutStrategy`。
+- 平台级 `Enabled` 在未设置（`EnabledSet == false`）时继承 `DefaultPlatformPolicy.Enabled`；`EnabledSet` 用来区分"未配置"与"显式 false"，不显式置 `true` 就无法禁用默认策略。
+- `ExclusiveWith` 与 `PlatformPolicies` 的 key 都会标准化为小写，并去掉空值、重复项和自身平台。
+- 未识别的 `KickoutStrategy`（非 `oldest/latest/all`）会让 `NewManager` 返回 `ErrKickoutStrategyInvalid`。
+
+冲突计算顺序：
+
+1. 标准化平台名，并校验是否属于内置平台集合。
+2. 读取登录平台对应的 `PlatformPolicy`；内置平台未显式配置时使用 `DefaultPlatformPolicy`。
+3. 校验 `PlatformPolicy.Enabled`。
+4. 按 `PlatformPolicy.RequireDeviceID` 校验 `DeviceID`。
+5. 从 ZSET 索引读取账号、平台、设备维度的 session，并清理不存在的 session。
+6. 计算 `ExclusiveWith` 命中的旧 session。
+7. 计算当前平台 `MaxSessions` 命中的旧 session。
+8. 计算全局 `MaxSessions` 命中的旧 session。
+9. 合并冲突 session 并去重。
+10. 按本次登录平台的 `KickoutStrategy` 决定踢旧 session、拒绝新登录或踢掉全部命中 session。
+
+如果同时命中平台互斥、平台最大数和全局最大数，`KickoutStrategy` 只取本次登录平台的策略，避免不同平台策略互相覆盖。
+
 ## 事件
 
 通过 `Config.EventHandler` 可以订阅认证事件：
@@ -269,6 +297,20 @@ func (auditHandler) HandleAuthEvent(ctx context.Context, event auth.Event) error
 
 事件处理器错误会被忽略，不会回滚已经完成的 Redis session 或 token 生命周期变更。业务层如需可靠审计，应在事件处理器内部自行处理重试、降级或异步队列。
 
+**当前包内不内置事件订阅者**。`pkg/auth` 只定义事件契约，使用方需自行实现 `EventHandler` 并通过 `Config.EventHandler` 注入；典型用途包括：
+
+- 写 `SysLoginLog` / `SysOperLog` 审计表。
+- 通过 `SessionRevokedEvent` 通知 realtime 模块执行 WebSocket 踢下线。
+- 通过 `LoginConflictEvent` 记录安全告警。
+- 通过 `RefreshReusedEvent` 触发密码改写或 session 强制吊销。
+
+`RevokeReason` 用于 `SessionRevokedEvent.Reason`，业务层可据此区分踢下线原因：
+
+- `RevokeReasonLogout`：用户主动退出。
+- `RevokeReasonLoginConflict`：并发登录冲突，命中 `KickoutOldest` / `KickoutAll` 时旧 session 被踢。
+- `RevokeReasonSubjectRevoke`：`RevokeSubject` 批量吊销。
+- `RevokeReasonRefreshReuse`：`RevokeSessionOnRefreshReuse=true` 时，refresh 重放触发 session 级联吊销。
+
 ## Redis key
 
 默认 key 前缀为 `fox-admin:auth:{auth}`。如果自定义 `KeyPrefix` 不包含 Redis hash tag，包会自动追加 `:{auth}`，保证 Lua 脚本在 Redis Cluster 中访问同一个 slot。
@@ -290,24 +332,37 @@ func (auditHandler) HandleAuthEvent(ctx context.Context, event auth.Event) error
 
 常见错误：
 
-- `ErrTokenRequired`：token 为空。
-- `ErrTokenMalformed`：token 格式非法。
-- `ErrTokenExpired`：access token 已过期。
-- `ErrInvalidSignature`：签名非法。
-- `ErrSessionNotFound`：session 不存在或已被吊销。
-- `ErrSessionExpired`：session 已过期。
-- `ErrRefreshTokenInvalid`：refresh token 无效。
-- `ErrRefreshTokenReused`：refresh token 被重复使用。
-- `ErrLoginConflict`：并发登录策略拒绝本次登录。
-- `ErrRedisUnavailable`：Redis 调用失败。
+- `ErrRedisRequired`：未传入 Redis 客户端（`NewManager` 时校验）。
+- `ErrSecretRequired`：未配置 `Secret`（`NewManager` 时校验）。
+- `ErrKickoutStrategyInvalid`：策略中包含非 `oldest/latest/all` 的 `KickoutStrategy`（`NewManager` 时校验）。
+- `ErrSubjectInvalid`：登录主体 ID/Type/Provider 不合法。
+- `ErrPlatformRequired` / `ErrPlatformInvalid` / `ErrPlatformDisabled`：登录平台为空 / 不在白名单 / 策略中显式禁用。
+- `ErrDeviceIDRequired`：策略要求设备 ID 时未提供。
+- `ErrTokenRequired` / `ErrTokenMalformed` / `ErrTokenExpired` / `ErrInvalidSignature`：access token 解析失败。
+- `ErrSessionNotFound`：Redis session 不存在或已被吊销。
+- `ErrSessionExpired`：Redis session 已过 `ExpiresAt` 或 `AbsoluteExpiresAt`。
+- `ErrRefreshTokenInvalid` / `ErrRefreshTokenReused`：refresh token 不存在 / 命中 `refresh_reuse` 重放键。
+- `ErrLoginConflict`：并发登录策略（`KickoutLatest`）拒绝本次登录。
+- `ErrRedisUnavailable`：Redis 调用失败（包装了底层错误，业务层可附加原始错误用于排障）。
+
+### TTL 边界细节
+
+- `AccessTTL`、`RefreshTTL`、`SessionTTL`、`MaxSessionTTL` 都会在 `normalizeConfig` 中 trim：`AccessTTL <= 0` 默认为 30m，`RefreshTTL <= 0` 默认为 7d，`SessionTTL <= 0` 默认等于 `RefreshTTL`。
+- `Issue` 签发的 access token 过期时间会被截断到 `min(now + AccessTTL, session.ExpiresAt)`；`Refresh` 同理。当 `AccessTTL > SessionTTL` 时，access token 的实际有效期等于 session TTL，而非配置值。
+- 写入 Redis 时 `ttlSeconds` 至少返回 1 秒，避免 sub-second TTL 在 Redis 上导致立即过期。
+- 当 `MaxSessionTTL > 0` 时，`AbsoluteExpiresAt = now + MaxSessionTTL`；后续每次 `Refresh` 都会把 `ExpiresAt` 截断到 `AbsoluteExpiresAt`，从而实现"最长有效期"上限。`MaxSessionTTL == 0` 表示不限制。
 
 ## HTTP 层接入建议
 
-- 登录接口：业务层校验账号密码后调用 `Issue`。
-- 鉴权中间件：从 `Authorization` 读取 Bearer token，调用 `VerifyAccess`，再把 `Claims` 或当前用户上下文写入请求上下文。
-- 刷新接口：接收 refresh token，调用 `Refresh` 并返回新的 `TokenPair`。
-- 退出接口：从当前 `Claims.SessionID` 调用 `RevokeSession`。
-- 强制下线：管理端按 session 调用 `RevokeSession`，按账号调用 `RevokeSubject`。
+> **状态：接入计划，未完成**。当前 `cmd/fox-admin/main.go` 仍未把 `pkg/auth.Manager` 装配到全局，也未挂载鉴权中间件；`desc/api.md` 已显式标注"系统接口暂不要求 Authorization"。`internal/middleware/auth.go` 已经按下面方案实现，但需要 main.go 在分组路由前显式调用 `app.Engine().Use(middleware.Auth(manager))`。
+
+接入方案：
+
+- **登录接口**（`POST /api/v1/system/auth/login`）：业务层校验账号密码、用户状态后构造 `auth.LoginContext` 并调用 `manager.Issue`；返回 `access_token` / `refresh_token` / `expires_at` / `refresh_expires_at` 给前端。
+- **鉴权中间件**：从 `Authorization` 读取 Bearer token，调用 `manager.VerifyAccess`，把 `Claims`（含 `SubjectID/SubjectType/Platform/SessionID`）写入 fox context（建议键 `auth.claims`）；非过期错误直接返回 401 鉴权失败，过期时尝试从 `X-Refresh-Token` 头读 refresh token 自动轮换。
+- **刷新接口**（`POST /api/v1/system/auth/refresh`）：接收 `refresh_token` 调用 `manager.Refresh`，返回新的 `TokenPair`。
+- **退出接口**（`POST /api/v1/system/auth/logout`）：从当前 `claims.SessionID` 调用 `manager.RevokeSession`。
+- **强制下线**：管理端按 session 调用 `manager.RevokeSession`，按账号调用 `manager.RevokeSubject`。
 
 `ParseBearer` 可以兼容纯 token 和 `Bearer <token>` 两种输入；中间件仍建议使用标准 `Authorization: Bearer <token>`。
 
@@ -319,7 +374,22 @@ func (auditHandler) HandleAuthEvent(ctx context.Context, event auth.Event) error
 go test ./pkg/auth
 ```
 
-当前集成测试使用 `miniredis` 覆盖登录签发、access 校验、refresh rotation、refresh token 重放、session 吊销、平台互斥和多平台策略。
+测试默认使用 `miniredis`（进程内 Redis 模拟），无需启动外部 Redis 服务，可直接跑。
+
+当前测试覆盖：
+
+- `TestManagerIssueVerifyRefreshAndRevoke` —— 登录签发、refresh rotation、refresh 重放、session 吊销完整链路。
+- `TestManagerRefreshWithoutRotationKeepsRefreshToken` —— 关闭 rotation 时 `Refresh` 不轮换 refresh token。
+- `TestManagerRefreshReuseCanRevokeSession` —— `RevokeSessionOnRefreshReuse=true` 触发 `SessionRevokedEvent` 且 `Reason=RefreshReuse`。
+- `TestManagerDirectRefreshReuseHandlingCanRevokeSession` —— 直接调用 `handleRefreshReuse` 走重用路径。
+- `TestManagerAccessExpiryIsCappedBySessionExpiry` —— 当 `AccessTTL > SessionTTL` 时，access token 实际过期时间被截断到 session TTL。
+- `TestManagerIssueSetsIndexTTL` —— 三个 ZSET 索引会按 `session_ttl + AccessTTL` 设过 TTL。
+- `TestManagerIssueRevokesExclusivePlatform` / `TestManagerIssueRevokesAndroidIOSMutualExclusive` —— 平台互斥的双向踢下线。
+- `TestManagerIssueRejectsLatestWhenExclusivePlatformExists` —— `KickoutLatest` 在平台互斥场景下拒绝新登录。
+- `TestManagerIssueSupportsConfiguredClientPlatforms` —— H5 / Android / iOS / MiniApp 同时启用时全部能签发并校验。
+- `TestManagerDefaultPolicyAllowsMaxSessionsOnlyConfig` —— 只配置账号级 `MaxSessions` 时其他维度不报错。
+- `TestNewManagerRejectsInvalidDependencies` / `TestNormalizeConfig*` / `TestValidateLogin` —— 构造与配置校验。
+- `TestParseBearer` / `TestSignAndParseAccess` / `TestParseAccessRejectsExpiredToken` / `TestParseAccessRejectsInvalidSignature` —— Bearer 解析与 access token 签验签、签名常时比较。
 
 ## 设计文档
 
