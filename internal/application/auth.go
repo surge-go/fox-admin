@@ -33,3 +33,78 @@ func (app *Application) initAuth() error {
 	app.auth = manager
 	return nil
 }
+
+// ToAuthConfig 转换为 pkg/auth 使用的认证配置。
+func (cfg *AuthConfig) ToAuthConfig() (auth.Config, error) {
+	if cfg == nil {
+		return auth.Config{}, errors.New("auth config is nil")
+	}
+
+	accessTTL := cfg.AccessTTL
+	if accessTTL <= 0 {
+		accessTTL = cfg.TokenTTL
+	}
+	return auth.Config{
+		Secret:                      cfg.TokenSecret,
+		Issuer:                      cfg.Issuer,
+		Audience:                    cfg.Audience,
+		KeyPrefix:                   cfg.KeyPrefix,
+		AccessTTL:                   accessTTL,
+		RefreshTTL:                  cfg.RefreshTTL,
+		SessionTTL:                  cfg.SessionTTL,
+		MaxSessionTTL:               cfg.MaxSessionTTL,
+		RefreshRotation:             cfg.RefreshRotation,
+		RevokeSessionOnRefreshReuse: cfg.RevokeSessionOnRefreshReuse,
+		Policy:                      cfg.Policy.toAuthPolicy(),
+	}, nil
+}
+
+func (cfg *AuthPolicyConfig) toAuthPolicy() auth.SessionPolicy {
+	if cfg == nil {
+		return auth.SessionPolicy{}
+	}
+
+	policy := auth.SessionPolicy{
+		MaxSessions:           cfg.MaxSessions,
+		DefaultPlatformPolicy: cfg.DefaultPlatform.toAuthPlatformPolicy(),
+	}
+	if len(cfg.Platforms) == 0 {
+		return policy
+	}
+
+	policy.PlatformPolicies = make(map[auth.Platform]auth.PlatformPolicy, len(cfg.Platforms))
+	for platform, platformPolicy := range cfg.Platforms {
+		policy.PlatformPolicies[auth.Platform(platform)] = platformPolicy.toAuthPlatformPolicy()
+	}
+	return policy
+}
+
+func (cfg *AuthPlatformPolicyConfig) toAuthPlatformPolicy() auth.PlatformPolicy {
+	if cfg == nil {
+		return auth.PlatformPolicy{}
+	}
+
+	policy := auth.PlatformPolicy{
+		MaxSessions:     cfg.MaxSessions,
+		RequireDeviceID: cfg.RequireDeviceID,
+		KickoutStrategy: auth.KickoutStrategy(cfg.KickoutStrategy),
+		ExclusiveWith:   toAuthPlatforms(cfg.ExclusiveWith),
+	}
+	if cfg.Enabled != nil {
+		policy.Enabled = *cfg.Enabled
+		policy.EnabledSet = true
+	}
+	return policy
+}
+
+func toAuthPlatforms(platforms []string) []auth.Platform {
+	if len(platforms) == 0 {
+		return nil
+	}
+
+	result := make([]auth.Platform, 0, len(platforms))
+	for _, platform := range platforms {
+		result = append(result, auth.Platform(platform))
+	}
+	return result
+}

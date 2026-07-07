@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	coreconfig "github.com/surge-go/fox/core/config"
 	"go.uber.org/zap"
@@ -40,6 +41,9 @@ func TestNewLoadsConfig(t *testing.T) {
 	}
 	if app.Redis() != app.redis {
 		t.Fatal("Redis() did not return application redis client")
+	}
+	if app.AuthManager() != app.auth {
+		t.Fatal("AuthManager() did not return application auth manager")
 	}
 	if app.DB() != app.db {
 		t.Fatal("DB() did not return application db")
@@ -153,6 +157,37 @@ func TestNewAllowsMissingLoggerConfig(t *testing.T) {
 	}
 }
 
+func TestNewInitializesAuthManager(t *testing.T) {
+	configPath := writeApplicationTestConfig(t, `
+fox:
+  mode: test
+  addr: ":0"
+
+redis:
+  mode: standalone
+  addrs:
+    - "127.0.0.1:6379"
+
+auth:
+  token_secret: "test-secret"
+  access_ttl: 15m
+  refresh_ttl: 24h
+`)
+
+	app, err := New(configPath)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer app.Close()
+
+	if app.auth == nil {
+		t.Fatal("auth manager is nil")
+	}
+	if app.AuthManager() != app.auth {
+		t.Fatal("AuthManager() did not return application auth manager")
+	}
+}
+
 func TestNewReturnsErrorForInvalidFoxConfig(t *testing.T) {
 	configPath := writeApplicationTestConfig(t, "fox:\n  mode: invalid\n")
 
@@ -185,11 +220,93 @@ func TestApplicationExposedMethodsAllowNil(t *testing.T) {
 	if app.Redis() != nil {
 		t.Fatal("Redis() = non-nil, want nil")
 	}
+	if app.AuthManager() != nil {
+		t.Fatal("AuthManager() = non-nil, want nil")
+	}
 	if app.DB() != nil {
 		t.Fatal("DB() = non-nil, want nil")
 	}
 	if err := app.Run(); err == nil {
 		t.Fatal("Run() error = nil, want error")
+	}
+}
+
+func TestAuthConfigToAuthConfig(t *testing.T) {
+	defaultEnabled := false
+	webEnabled := true
+	refreshRotation := false
+	cfg := &AuthConfig{
+		TokenSecret:                 "test-secret",
+		TokenTTL:                    10 * time.Minute,
+		Issuer:                      "fox-admin",
+		Audience:                    "admin",
+		KeyPrefix:                   "fox-admin:auth",
+		RefreshTTL:                  24 * time.Hour,
+		SessionTTL:                  12 * time.Hour,
+		MaxSessionTTL:               7 * 24 * time.Hour,
+		RefreshRotation:             &refreshRotation,
+		RevokeSessionOnRefreshReuse: true,
+		Policy: &AuthPolicyConfig{
+			MaxSessions: 3,
+			DefaultPlatform: &AuthPlatformPolicyConfig{
+				Enabled:         &defaultEnabled,
+				MaxSessions:     2,
+				RequireDeviceID: true,
+				KickoutStrategy: "latest",
+				ExclusiveWith:   []string{"h5"},
+			},
+			Platforms: map[string]*AuthPlatformPolicyConfig{
+				"web": {
+					Enabled:         &webEnabled,
+					MaxSessions:     1,
+					RequireDeviceID: false,
+					KickoutStrategy: "oldest",
+					ExclusiveWith:   []string{"ios", "android"},
+				},
+			},
+		},
+	}
+
+	authConfig, err := cfg.ToAuthConfig()
+	if err != nil {
+		t.Fatalf("ToAuthConfig() error = %v", err)
+	}
+	if authConfig.Secret != cfg.TokenSecret {
+		t.Fatalf("Secret = %q, want %q", authConfig.Secret, cfg.TokenSecret)
+	}
+	if authConfig.AccessTTL != cfg.TokenTTL {
+		t.Fatalf("AccessTTL = %s, want token ttl fallback %s", authConfig.AccessTTL, cfg.TokenTTL)
+	}
+	if authConfig.RefreshTTL != cfg.RefreshTTL {
+		t.Fatalf("RefreshTTL = %s, want %s", authConfig.RefreshTTL, cfg.RefreshTTL)
+	}
+	if authConfig.RefreshRotation != cfg.RefreshRotation {
+		t.Fatal("RefreshRotation did not preserve pointer value")
+	}
+	if !authConfig.RevokeSessionOnRefreshReuse {
+		t.Fatal("RevokeSessionOnRefreshReuse = false, want true")
+	}
+	if authConfig.Policy.MaxSessions != 3 {
+		t.Fatalf("Policy.MaxSessions = %d, want 3", authConfig.Policy.MaxSessions)
+	}
+	if authConfig.Policy.DefaultPlatformPolicy.Enabled {
+		t.Fatal("DefaultPlatformPolicy.Enabled = true, want false")
+	}
+	if !authConfig.Policy.DefaultPlatformPolicy.EnabledSet {
+		t.Fatal("DefaultPlatformPolicy.EnabledSet = false, want true")
+	}
+	if authConfig.Policy.DefaultPlatformPolicy.KickoutStrategy != "latest" {
+		t.Fatalf("DefaultPlatformPolicy.KickoutStrategy = %q, want latest", authConfig.Policy.DefaultPlatformPolicy.KickoutStrategy)
+	}
+	webPolicy := authConfig.Policy.PlatformPolicies["web"]
+	if !webPolicy.Enabled || !webPolicy.EnabledSet {
+		t.Fatal("web policy enabled state was not mapped")
+	}
+	if webPolicy.MaxSessions != 1 {
+		t.Fatalf("web policy MaxSessions = %d, want 1", webPolicy.MaxSessions)
+	}
+	if len(webPolicy.ExclusiveWith) != 2 || webPolicy.ExclusiveWith[0] != "ios" || webPolicy.ExclusiveWith[1] != "android" {
+		t.Fatalf("web policy ExclusiveWith = %#v, want ios/android", webPolicy.ExclusiveWith)
 	}
 }
 

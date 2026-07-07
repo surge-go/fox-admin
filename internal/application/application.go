@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"fox-admin/pkg/auth"
+
 	goredis "github.com/redis/go-redis/v9"
 	"github.com/surge-go/fox"
 	"github.com/surge-go/fox/core/config"
@@ -34,6 +36,9 @@ type Application struct {
 
 	// redis 表示 Redis 客户端。
 	redis goredis.UniversalClient
+
+	// auth 表示认证会话管理器。
+	auth *auth.Manager
 
 	// db 表示 GORM 数据库客户端。
 	db *gorm.DB
@@ -94,6 +99,14 @@ func New(filepath string) (*Application, error) {
 		app.logger.Info("Redis 客户端初始化完成")
 	}
 
+	if err := app.initAuth(); err != nil {
+		app.Close()
+		return nil, err
+	}
+	if app.logger != nil && app.auth != nil {
+		app.logger.Info("认证会话管理器初始化完成")
+	}
+
 	if err := app.initDatabase(); err != nil {
 		app.Close()
 		return nil, err
@@ -149,6 +162,15 @@ func (app *Application) Redis() goredis.UniversalClient {
 	}
 
 	return app.redis
+}
+
+// AuthManager 返回认证会话管理器。
+func (app *Application) AuthManager() *auth.Manager {
+	if app == nil {
+		return nil
+	}
+
+	return app.auth
 }
 
 // DB 返回 GORM 数据库客户端。
