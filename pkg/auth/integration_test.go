@@ -267,9 +267,13 @@ func TestManagerIssueRevokesAndroidIOSMutualExclusive(t *testing.T) {
 	}
 }
 
-func TestManagerRefreshWithoutRotationKeepsRefreshToken(t *testing.T) {
+func TestManagerRefreshWithoutRotationRejectsReplay(t *testing.T) {
 	ctx := context.Background()
-	manager, closeRedis := newIntegrationManager(t, Config{RefreshRotation: boolPtr(false)})
+	events := &recordingEventHandler{}
+	manager, closeRedis := newIntegrationManager(t, Config{
+		RefreshRotation: boolPtr(false),
+		EventHandler:    events,
+	})
 	defer closeRedis()
 
 	pair, err := manager.Issue(ctx, LoginContext{
@@ -287,8 +291,126 @@ func TestManagerRefreshWithoutRotationKeepsRefreshToken(t *testing.T) {
 	if refreshed.RefreshToken != pair.RefreshToken {
 		t.Fatal("Refresh() changed refresh token with rotation disabled")
 	}
-	if _, err := manager.Refresh(ctx, pair.RefreshToken); err != nil {
-		t.Fatalf("Refresh(second) error = %v", err)
+	if _, err := manager.Refresh(ctx, pair.RefreshToken); !errors.Is(err, ErrRefreshTokenReused) {
+		t.Fatalf("Refresh(replay) error = %v, want %v", err, ErrRefreshTokenReused)
+	}
+	if _, err := manager.VerifyAccess(ctx, refreshed.AccessToken); err != nil {
+		t.Fatalf("VerifyAccess(after replay) error = %v, want session not revoked", err)
+	}
+	if got := events.count(EventRefreshReused); got != 1 {
+		t.Fatalf("refresh reused event count = %d, want 1", got)
+	}
+}
+
+func TestManagerRefreshWithoutRotationReuseCascadesSessionRevoke(t *testing.T) {
+	ctx := context.Background()
+	events := &recordingEventHandler{}
+	manager, closeRedis := newIntegrationManager(t, Config{
+		RefreshRotation:             boolPtr(false),
+		RevokeSessionOnRefreshReuse: true,
+		EventHandler:                events,
+	})
+	defer closeRedis()
+
+	pair, err := manager.Issue(ctx, LoginContext{
+		Subject:  Subject{ID: 1, Type: SubjectAdmin},
+		Platform: PlatformWeb,
+		DeviceID: "device-1",
+	})
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+	refreshed, err := manager.Refresh(ctx, pair.RefreshToken)
+	if err != nil {
+		t.Fatalf("Refresh(first) error = %v", err)
+	}
+	if _, err := manager.Refresh(ctx, pair.RefreshToken); !errors.Is(err, ErrRefreshTokenReused) {
+		t.Fatalf("Refresh(replay) error = %v, want %v", err, ErrRefreshTokenReused)
+	}
+	if _, err := manager.VerifyAccess(ctx, refreshed.AccessToken); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("VerifyAccess(after reuse revoke) error = %v, want %v", err, ErrSessionNotFound)
+	}
+	if got := events.count(EventRefreshReused); got != 1 {
+		t.Fatalf("refresh reused event count = %d, want 1", got)
+	}
+	if got := events.count(EventSessionRevoked); got != 1 {
+		t.Fatalf("session revoked event count = %d, want 1", got)
+	}
+	revoked, ok := events.last(EventSessionRevoked).(SessionRevokedEvent)
+	if !ok || revoked.Reason != RevokeReasonRefreshReuse {
+		t.Fatalf("last revoked event = %#v, want refresh reuse reason", revoked)
+	}
+}
+
+func TestManagerRefreshDefaultRotationRejectsReplay(t *testing.T) {
+	ctx := context.Background()
+	manager, closeRedis := newIntegrationManager(t, Config{})
+	defer closeRedis()
+
+	pair, err := manager.Issue(ctx, LoginContext{
+		Subject:  Subject{ID: 1, Type: SubjectAdmin},
+		Platform: PlatformWeb,
+		DeviceID: "device-1",
+	})
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	// 连续多轮 refresh,验证 rotation 模式下旧 token 重放被拒绝,
+	// 而最新 token 仍能继续被使用(直到该 token 自己被消费)。
+	prev := pair.RefreshToken
+	for i := 0; i < 3; i++ {
+		next, err := manager.Refresh(ctx, prev)
+		if err != nil {
+			t.Fatalf("Refresh(rotation %d) error = %v", i+1, err)
+		}
+		if next.RefreshToken == prev {
+			t.Fatalf("Refresh(rotation %d) kept same refresh token", i+1)
+		}
+		// 重放刚被消费的 token,应返回 reused。
+		if _, err := manager.Refresh(ctx, prev); !errors.Is(err, ErrRefreshTokenReused) {
+			t.Fatalf("Refresh(replay of %s) error = %v, want %v", prev, err, ErrRefreshTokenReused)
+		}
+		prev = next.RefreshToken
+	}
+}
+
+func TestManagerRefreshReuseAfterSessionRevoked(t *testing.T) {
+	ctx := context.Background()
+	events := &recordingEventHandler{}
+	manager, closeRedis := newIntegrationManager(t, Config{
+		RevokeSessionOnRefreshReuse: true,
+		EventHandler:                events,
+	})
+	defer closeRedis()
+
+	pair, err := manager.Issue(ctx, LoginContext{
+		Subject:  Subject{ID: 1, Type: SubjectAdmin},
+		Platform: PlatformWeb,
+		DeviceID: "device-1",
+	})
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	// Session 被 RevokeSession 踢下线后,refresh:{hash} 被 revokeSessionScript 删除。
+	// reuse:{hash} 此前从未被写入,此时也不存在,所以第二次 refresh 走 invalid 分支
+	// (handleMissingRefresh 中 Get refresh_reuse 返回 redis.Nil → ErrRefreshTokenInvalid)。
+	// 这是预期行为:revoke 之后 refresh token 即时作废,不必再经过 reused 路径。
+	claims, err := manager.VerifyAccess(ctx, pair.AccessToken)
+	if err != nil {
+		t.Fatalf("VerifyAccess() error = %v", err)
+	}
+	if err := manager.RevokeSession(ctx, claims.SessionID); err != nil {
+		t.Fatalf("RevokeSession() error = %v", err)
+	}
+
+	_, err = manager.Refresh(ctx, pair.RefreshToken)
+	if !errors.Is(err, ErrRefreshTokenInvalid) {
+		t.Fatalf("Refresh(after revoke) error = %v, want %v", err, ErrRefreshTokenInvalid)
+	}
+	if got := events.count(EventRefreshReused); got != 0 {
+		t.Fatalf("refresh reused event count = %d, want 0", got)
 	}
 }
 

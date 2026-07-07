@@ -179,7 +179,13 @@ type TokenPair struct {
 
 默认启用 refresh token rotation。旧 refresh token 被再次使用时返回 `ErrRefreshTokenReused`，并触发 `RefreshReusedEvent`。如果配置 `RevokeSessionOnRefreshReuse` 为 `true`，包会同时吊销对应 session，并通过 `SessionRevokedEvent.Reason = RevokeReasonRefreshReuse` 通知。
 
-当 `Config.RefreshRotation` 显式置 `false` 时，`Refresh` 不会轮换 refresh token，新 `TokenPair.RefreshToken` 与旧值相同；旧 refresh token 在 session 未过期前可继续使用，不会触发 `ErrRefreshTokenReused`。此时仍会刷新 session 的 `ExpiresAt` 和 `LastRefreshedAt`，但不会写 `refresh_reuse:{hash}`。
+当 `Config.RefreshRotation` 显式置 `false` 时：
+
+- `Refresh` 返回的 `TokenPair.RefreshToken` 与旧值相同（线层面 refresh token 不变）。
+- session 的 `ExpiresAt` 和 `LastRefreshedAt` 仍会在每次成功 refresh 时前移。
+- `refresh_reuse:{hash}` 在每次成功 Refresh 后写入（与 `RefreshRotation` 开关无关）。
+- 同一 refresh token 的第二次使用会返回 `ErrRefreshTokenReused`，触发 `RefreshReusedEvent`，并在 `RevokeSessionOnRefreshReuse=true` 时级联吊销 session。
+- `RefreshRotation` 仅控制是否签发新的 opaque token，不影响 reuse 检测是否生效。
 
 ### RevokeSession
 
@@ -324,7 +330,18 @@ func (auditHandler) HandleAuthEvent(ctx context.Context, event auth.Event) error
 - `device_sessions:<subject_type>:<subject_id>:<device_id>`：设备 session 索引。
 - `refresh:<hash>`：refresh token hash 到 session 的映射。
 - `session_refresh:<session_id>`：session 下当前 refresh token hash。
-- `refresh_reuse:<hash>`：已轮换 refresh token 的短期重放检测 key。
+- `refresh_reuse:<hash>`：已成功使用过的 refresh token 的短期重放检测 key（每次成功 Refresh 后写入，与 `RefreshRotation` 开关无关）。
+
+## Revoke 行为
+
+`RevokeSession` 与 `RevokeSubject` 在 Redis Lua 脚本内原子地清理 session、refresh token 与所有 session 索引。Revoke 之后:
+
+- **Access token 即时失效**:`VerifyAccess` 在 Lua 删除 `session:{sid}` 后立即返回 `ErrSessionNotFound`,无需等待 token 自然过期。
+- **Refresh token 即时失效**:`refresh:{hash}` 在同一 Lua 调用中被 DEL,下一次 `Refresh` 走 `handleMissingRefresh` 路径,因为 `refresh_reuse:{hash}` 在首次 Refresh 之前尚未写入,直接返回 `ErrRefreshTokenInvalid`。
+- **不触发 `RefreshReusedEvent`**:与 refresh 重放不同,revoke 后调用走的是 `invalid` 路径而非 `reused` 路径,业务层应据此区分"被主动吊销"与"被他人重放"。
+- **`SessionRevokedEvent` 仍会触发**,业务层审计仍可见 `Reason = logout / login_conflict / subject_revoke / refresh_reuse`。
+
+跨设备踢下线（`Issue` 命中 `KickoutOldest`/`KickoutAll`）走 `issueScript`,旧 session 同样被 Lua 原子清理,效果与 `RevokeSession` 一致。
 
 ## 错误处理
 
@@ -379,7 +396,9 @@ go test ./pkg/auth
 当前测试覆盖：
 
 - `TestManagerIssueVerifyRefreshAndRevoke` —— 登录签发、refresh rotation、refresh 重放、session 吊销完整链路。
-- `TestManagerRefreshWithoutRotationKeepsRefreshToken` —— 关闭 rotation 时 `Refresh` 不轮换 refresh token。
+- `TestManagerRefreshWithoutRotationRejectsReplay` —— 关闭 rotation 时第一次 Refresh 成功且 refresh token 不变，第二次使用同一 refresh token 返回 `ErrRefreshTokenReused`，触发 `RefreshReusedEvent`，session 默认未被吊销。
+- `TestManagerRefreshWithoutRotationReuseCascadesSessionRevoke` —— 关闭 rotation + `RevokeSessionOnRefreshReuse=true` 时，第二次 refresh 触发 session 级联吊销，`Reason=RefreshReuse`。
+- `TestManagerRefreshDefaultRotationRejectsReplay` —— `Config{}`（默认 rotation=nil→true）下旧 refresh token 与第二轮 new refresh token 重放都被拒绝。
 - `TestManagerRefreshReuseCanRevokeSession` —— `RevokeSessionOnRefreshReuse=true` 触发 `SessionRevokedEvent` 且 `Reason=RefreshReuse`。
 - `TestManagerDirectRefreshReuseHandlingCanRevokeSession` —— 直接调用 `handleRefreshReuse` 走重用路径。
 - `TestManagerAccessExpiryIsCappedBySessionExpiry` —— 当 `AccessTTL > SessionTTL` 时，access token 实际过期时间被截断到 session TTL。

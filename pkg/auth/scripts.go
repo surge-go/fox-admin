@@ -159,10 +159,23 @@ if current_hash ~= old_hash then
   return {0, "invalid"}
 end
 
-if rotation == "1" then
-  redis.call("DEL", old_refresh_key)
-  redis.call("SET", reuse_key, session_id, "EX", reuse_ttl)
+-- SETNX on the reuse key is the rotation-independent replay guard.
+-- If the key already exists, this refresh is the second (or later) use
+-- of the same hash, regardless of whether RefreshRotation is on or off.
+-- The rotation ARGV is now historical at the Lua level; it is kept only
+-- for wire compatibility with the Go caller signature.
+local reuse_set = redis.call("SETNX", reuse_key, session_id)
+if reuse_set == 0 then
+  return {0, "reused"}
 end
+redis.call("EXPIRE", reuse_key, reuse_ttl)
+
+-- Always rotate the refresh slot. When RefreshRotation is off, Go sets
+-- newRefreshToken == refreshToken and newHash == oldHash, so
+-- new_refresh_key == old_refresh_key. The DEL below removes the slot,
+-- then the SET below recreates it with the same value/TTL — net effect is
+-- a no-op on Redis state, but it lets us reuse the same Lua for both modes.
+redis.call("DEL", old_refresh_key)
 redis.call("SET", new_refresh_key, session_id, "EX", refresh_ttl)
 redis.call("SET", session_refresh_key, new_hash, "EX", session_ttl)
 redis.call("SET", session_key, session_json, "EX", session_ttl)

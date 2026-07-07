@@ -277,6 +277,9 @@ func (m *Manager) Refresh(ctx context.Context, refreshToken string) (*TokenPair,
 		strconv.FormatInt(ttlSeconds(session.ExpiresAt.Sub(now)), 10),
 		strconv.FormatInt(ttlSeconds(refreshExpiresAt.Sub(now)), 10),
 		strconv.FormatInt(ttlSeconds(refreshReuseTTL), 10),
+		// refreshRotation is now historical at the Lua level: reuse
+		// detection runs regardless of this flag. The ARGV is kept to
+		// preserve the script's call signature.
 		boolArg(m.cfg.refreshRotation()),
 		strconv.FormatInt(ttlSeconds(session.ExpiresAt.Sub(now)+m.cfg.AccessTTL), 10),
 	).Result()
