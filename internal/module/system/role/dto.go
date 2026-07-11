@@ -1,0 +1,128 @@
+package role
+
+import "time"
+
+// CreateReq 表示创建角色请求。
+type CreateReq struct {
+	Name      string  `json:"name" form:"name"`
+	Code      string  `json:"code" form:"code"`
+	DataScope *string `json:"data_scope" form:"data_scope"`
+	MenuIDs   []int64 `json:"menu_ids" form:"menu_ids"`
+	DeptIDs   []int64 `json:"dept_ids" form:"dept_ids"`
+	Sort      *int    `json:"sort" form:"sort"`
+	Status    *int    `json:"status" form:"status"`
+	Remark    *string `json:"remark" form:"remark"`
+}
+
+// DeleteReq 表示删除角色请求。
+type DeleteReq struct {
+	IDs []int64 `json:"ids" form:"ids"`
+}
+
+// UpdateReq 表示更新角色请求。
+type UpdateReq struct {
+	ID        int64   `json:"id" form:"id"`
+	Name      string  `json:"name" form:"name"`
+	Code      string  `json:"code" form:"code"`
+	DataScope *string `json:"data_scope" form:"data_scope"`
+	MenuIDs   []int64 `json:"menu_ids" form:"menu_ids"`
+	DeptIDs   []int64 `json:"dept_ids" form:"dept_ids"`
+	Sort      *int    `json:"sort" form:"sort"`
+	Status    *int    `json:"status" form:"status"`
+	Remark    *string `json:"remark" form:"remark"`
+}
+
+// ListReq 表示查询角色列表请求。
+type ListReq struct {
+	Name   string `json:"name" form:"name"`
+	Code   string `json:"code" form:"code"`
+	Status *int   `json:"status" form:"status"`
+	Page   int    `json:"page" form:"page"`
+	Size   int    `json:"size" form:"size"`
+}
+
+// ListResp 表示查询角色列表响应。
+type ListResp struct {
+	Total int64           `json:"total"`
+	List  []*ListItemResp `json:"list"`
+}
+
+// ListItemResp 表示角色列表项。
+type ListItemResp struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	Code      string    `json:"code"`
+	DataScope *string   `json:"data_scope"`
+	Sort      *int      `json:"sort"`
+	Status    *int      `json:"status"`
+	Remark    *string   `json:"remark"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// OptionsResp 表示查询角色选项响应。
+type OptionsResp struct {
+	List []*OptionItemResp `json:"list"`
+}
+
+// OptionItemResp 表示角色选项项。
+type OptionItemResp struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	Code string `json:"code"`
+}
+
+// DetailReq 表示查询角色详情请求。
+type DetailReq struct {
+	ID int64 `json:"id" form:"id"`
+}
+
+// DetailResp 表示查询角色详情响应。
+type DetailResp struct {
+	ID        int64           `json:"id"`
+	Name      string          `json:"name"`
+	Code      string          `json:"code"`
+	DataScope *string         `json:"data_scope"`
+	MenuIDs   []int64         `json:"menu_ids"`
+	Menus     []*MenuInfoResp `json:"menus"`
+	DeptIDs   []int64         `json:"dept_ids"`
+	Depts     []*DeptInfoResp `json:"depts"`
+	Sort      *int            `json:"sort"`
+	Status    *int            `json:"status"`
+	Remark    *string         `json:"remark"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
+}
+
+// MenuInfoResp 表示角色绑定菜单基础信息。
+type MenuInfoResp struct {
+	ID    int64  `json:"id"`
+	Title string `json:"title"`
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+}
+
+// DeptInfoResp 表示角色绑定部门基础信息。
+type DeptInfoResp struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// UpdateStatusReq 表示更新角色状态请求。
+type UpdateStatusReq struct {
+	IDs    []int64 `json:"ids" form:"ids"`
+	Status *int    `json:"status" form:"status"`
+}
+
+// AssignMenusReq 表示分配角色菜单请求。
+type AssignMenusReq struct {
+	ID      int64   `json:"id" form:"id"`
+	MenuIDs []int64 `json:"menu_ids" form:"menu_ids"`
+}
+
+// AssignDeptsReq 表示分配角色数据权限部门请求。
+type AssignDeptsReq struct {
+	ID        int64   `json:"id" form:"id"`
+	DataScope string  `json:"data_scope" form:"data_scope"`
+	DeptIDs   []int64 `json:"dept_ids" form:"dept_ids"`
+}

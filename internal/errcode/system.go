@@ -245,4 +245,8 @@ var (
 	ErrAuthLoginConflict = errors.NewWithStatus(1118, http.StatusOK, "当前账号已在其他设备登录")
 	// ErrUserGenderInvalid 表示用户性别非法。
 	ErrUserGenderInvalid = errors.NewWithStatus(1119, http.StatusOK, "用户性别非法")
+	// ErrRoleAssignDeptsReqNil 表示分配角色数据权限部门请求参数为空。
+	ErrRoleAssignDeptsReqNil = errors.NewWithStatus(1120, http.StatusOK, "分配角色数据权限部门参数不能为空")
+	// ErrRoleAssignDeptsFailed 表示分配角色数据权限部门失败。
+	ErrRoleAssignDeptsFailed = errors.NewWithStatus(1121, http.StatusInternalServerError, "分配角色数据权限部门失败")
 )
