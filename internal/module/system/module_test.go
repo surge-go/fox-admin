@@ -57,13 +57,23 @@ func TestRegisterRoutesRegistersSystemRoutes(t *testing.T) {
 	})
 	RegisterRoutes(engine.Group("/api/v1"), db, zap.NewNop())
 
-	menuReq := httptest.NewRequest(http.MethodGet, "/api/v1/system/menu/tree", nil)
-	menuRec := httptest.NewRecorder()
-	engine.ServeHTTP(menuRec, menuReq)
-	if menuRec.Code != http.StatusOK {
-		t.Fatalf("menu status = %d, want 200; body = %s", menuRec.Code, menuRec.Body.String())
+	userReq := httptest.NewRequest(http.MethodGet, "/api/v1/system/user/list", nil)
+	userRec := httptest.NewRecorder()
+	engine.ServeHTTP(userRec, userReq)
+	if userRec.Code != http.StatusOK {
+		t.Fatalf("user status = %d, want 200; body = %s", userRec.Code, userRec.Body.String())
 	}
-	if body := menuRec.Body.String(); !strings.Contains(body, `"code":200`) || !strings.Contains(body, `"path":"/system"`) {
-		t.Fatalf("menu body = %s, want menu tree", body)
+	if body := userRec.Body.String(); !strings.Contains(body, `"code":200`) || !strings.Contains(body, `"username":"admin"`) {
+		t.Fatalf("user body = %s, want seeded admin user", body)
+	}
+
+	roleReq := httptest.NewRequest(http.MethodGet, "/api/v1/system/role/options", nil)
+	roleRec := httptest.NewRecorder()
+	engine.ServeHTTP(roleRec, roleReq)
+	if roleRec.Code != http.StatusOK {
+		t.Fatalf("role status = %d, want 200; body = %s", roleRec.Code, roleRec.Body.String())
+	}
+	if body := roleRec.Body.String(); !strings.Contains(body, `"code":200`) || !strings.Contains(body, `"code":"admin"`) {
+		t.Fatalf("role body = %s, want seeded admin role", body)
 	}
 }

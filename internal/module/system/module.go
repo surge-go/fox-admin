@@ -2,9 +2,9 @@ package system
 
 import (
 	"fox-admin/internal/module/system/entity"
-	"fox-admin/internal/module/system/handler"
+	"fox-admin/internal/module/system/role"
 	"fox-admin/internal/module/system/seed"
-	"fox-admin/internal/module/system/service"
+	"fox-admin/internal/module/system/user"
 
 	"github.com/surge-go/fox"
 	"go.uber.org/zap"
@@ -20,19 +20,14 @@ func Migrate(db *gorm.DB, tablePrefixes ...string) error {
 }
 
 // RegisterRoutes 注册系统模块 HTTP 路由。
-func RegisterRoutes(group *fox.RouteGroup, db *gorm.DB, logger *zap.Logger) {
-	if db == nil {
-		panic("system module db is nil")
-	}
-	if logger == nil {
-		panic("system module logger is nil")
+func RegisterRoutes(group *fox.RouteGroup, db *gorm.DB, logger *zap.Logger, tablePrefixes ...string) {
+	if group == nil {
+		panic("system module route group is nil")
 	}
 
 	systemGroup := group.Group("/system")
-	menuService := service.NewMenuService(db, logger)
-	handler.NewMenuHandler(menuService, logger).RegisterRoutes(systemGroup)
-	roleService := service.NewRoleService(db, logger)
-	handler.NewRoleHandler(roleService, logger).RegisterRoutes(systemGroup)
-	userService := service.NewUserService(db, logger)
-	handler.NewUserHandler(userService, logger).RegisterRoutes(systemGroup)
+	userService := user.NewService(db, logger, tablePrefixes...)
+	user.NewHandler(userService, logger).RegisterRoutes(systemGroup)
+	roleService := role.NewService(db, logger, tablePrefixes...)
+	role.NewHandler(roleService, logger).RegisterRoutes(systemGroup)
 }
