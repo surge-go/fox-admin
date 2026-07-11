@@ -1,0 +1,954 @@
+package user
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"time"
+
+	"fox-admin/internal/errcode"
+	"fox-admin/internal/module/system/entity"
+
+	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
+)
+
+const (
+	defaultStatus   = 1
+	defaultGender   = 0
+	defaultListPage = 1
+	defaultListSize = 20
+	maxListSize     = 200
+	batchSize       = 100
+)
+
+// Service 表示用户业务服务。
+type Service struct {
+	db     *gorm.DB
+	logger *zap.Logger
+}
+
+// NewService 创建用户业务服务。
+func NewService(db *gorm.DB, logger *zap.Logger, tablePrefixes ...string) *Service {
+	if db == nil {
+		panic("user service db is nil")
+	}
+	if logger == nil {
+		panic("user service logger is nil")
+	}
+	_ = tablePrefixes
+
+	return &Service{
+		db:     db,
+		logger: logger,
+	}
+}
+
+// Create 创建用户。
+func (s *Service) Create(ctx context.Context, req *CreateReq) error {
+	logger := s.logger
+	userRoleTable := entity.UserRole{}.TableName()
+	userPostTable := entity.UserPost{}.TableName()
+
+	// 请求体为空时直接返回业务错误，避免后续字段访问触发 panic。
+	if req == nil {
+		return errcode.ErrUserCreateReqNil
+	}
+
+	// 先处理必填字段和基础取值范围，尽早拦截无效请求。
+	username := strings.TrimSpace(req.Username)
+	if username == "" {
+		return errcode.ErrUserUsernameRequired
+	}
+	password := strings.TrimSpace(req.Password)
+	if password == "" {
+		return errcode.ErrUserPasswordRequired
+	}
+	if req.DeptID != nil && *req.DeptID <= 0 {
+		return errcode.ErrUserDeptIDInvalid
+	}
+	if req.Gender != nil && (*req.Gender < 0 || *req.Gender > 2) {
+		return errcode.ErrUserGenderInvalid
+	}
+	if req.Status != nil && (*req.Status != 0 && *req.Status != 1) {
+		return errcode.ErrUserStatusRequired
+	}
+	// 状态和性别都有业务默认值：未传 status 时启用，未传 gender 时未知。
+	status := defaultStatus
+	if req.Status != nil {
+		status = *req.Status
+	}
+	gender := defaultGender
+	if req.Gender != nil {
+		gender = *req.Gender
+	}
+
+	// 可选字符串字段统一 trim；空字符串按未填写处理，避免写入无意义空值。
+	var nickname *string
+	if req.Nickname != nil {
+		value := strings.TrimSpace(*req.Nickname)
+		if value != "" {
+			nickname = &value
+		}
+	}
+	var avatar *string
+	if req.Avatar != nil {
+		value := strings.TrimSpace(*req.Avatar)
+		if value != "" {
+			avatar = &value
+		}
+	}
+	var email *string
+	if req.Email != nil {
+		value := strings.TrimSpace(*req.Email)
+		if value != "" {
+			email = &value
+		}
+	}
+	var phone *string
+	if req.Phone != nil {
+		value := strings.TrimSpace(*req.Phone)
+		if value != "" {
+			phone = &value
+		}
+	}
+	var remark *string
+	if req.Remark != nil {
+		value := strings.TrimSpace(*req.Remark)
+		if value != "" {
+			remark = &value
+		}
+	}
+
+	// 角色 ID 在入库前完成合法性校验和去重，避免重复插入关联表。
+	roleIDs := make([]int64, 0, len(req.RoleIDs))
+	if len(req.RoleIDs) > 0 {
+		seen := make(map[int64]struct{}, len(req.RoleIDs))
+		for _, id := range req.RoleIDs {
+			if id <= 0 {
+				return errcode.ErrUserRoleIDInvalid
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			roleIDs = append(roleIDs, id)
+		}
+	}
+
+	// 岗位 ID 同样在事务前归一化，后续存在性检查只面对去重后的 ID 集合。
+	postIDs := make([]int64, 0, len(req.PostIDs))
+	if len(req.PostIDs) > 0 {
+		seen := make(map[int64]struct{}, len(req.PostIDs))
+		for _, id := range req.PostIDs {
+			if id <= 0 {
+				return errcode.ErrUserPostIDInvalid
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			postIDs = append(postIDs, id)
+		}
+	}
+
+	// 密码只保存 bcrypt 摘要，不把明文密码传入实体或日志。
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		logger.Error("创建用户失败：密码摘要生成失败", zap.String("username", username), zap.Error(err))
+		return errcode.ErrUserCreateFailed.WithErr(err)
+	}
+
+	// 用户主表和角色/岗位关联表必须在同一个事务内写入，避免部分成功。
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 账号、邮箱、手机号需要保持唯一；邮箱和手机号为空时跳过对应检查。
+		var usernameCount int64
+		if err = tx.Model(&entity.User{}).Where("username = ?", username).Count(&usernameCount).Error; err != nil {
+			logger.Error("创建用户失败：查询账号失败", zap.String("username", username), zap.Error(err))
+			return errcode.ErrUserUsernameQueryFailed.WithErr(err)
+		}
+		if usernameCount > 0 {
+			return errcode.ErrUserUsernameExists
+		}
+
+		if email != nil {
+			var emailCount int64
+			if err = tx.Model(&entity.User{}).Where("email = ?", *email).Count(&emailCount).Error; err != nil {
+				logger.Error("创建用户失败：查询邮箱失败", zap.String("username", username), zap.String("email", *email), zap.Error(err))
+				return errcode.ErrUserEmailQueryFailed.WithErr(err)
+			}
+			if emailCount > 0 {
+				return errcode.ErrUserEmailExists
+			}
+		}
+
+		if phone != nil {
+			var phoneCount int64
+			if err = tx.Model(&entity.User{}).Where("phone = ?", *phone).Count(&phoneCount).Error; err != nil {
+				logger.Error("创建用户失败：查询手机号失败", zap.String("username", username), zap.String("phone", *phone), zap.Error(err))
+				return errcode.ErrUserPhoneQueryFailed.WithErr(err)
+			}
+			if phoneCount > 0 {
+				return errcode.ErrUserPhoneExists
+			}
+		}
+
+		// 可选部门存在时必须能查到真实部门，避免用户挂到不存在的部门。
+		if req.DeptID != nil {
+			var deptCount int64
+			if err = tx.Model(&entity.Dept{}).Where("id = ?", *req.DeptID).Count(&deptCount).Error; err != nil {
+				logger.Error("创建用户失败：查询部门失败", zap.String("username", username), zap.Int64("dept_id", *req.DeptID), zap.Error(err))
+				return errcode.ErrUserDeptQueryFailed.WithErr(err)
+			}
+			if deptCount == 0 {
+				return errcode.ErrUserDeptNotFound
+			}
+		}
+
+		// 绑定角色数量必须与请求去重后的角色数量一致，否则说明存在无效角色 ID。
+		if len(roleIDs) > 0 {
+			var roleCount int64
+			if err = tx.Model(&entity.Role{}).Where("id IN ?", roleIDs).Count(&roleCount).Error; err != nil {
+				logger.Error("创建用户失败：查询角色失败", zap.String("username", username), zap.Int64s("role_ids", roleIDs), zap.Error(err))
+				return errcode.ErrUserRoleQueryFailed.WithErr(err)
+			}
+			if roleCount != int64(len(roleIDs)) {
+				return errcode.ErrUserRoleNotFound
+			}
+		}
+
+		// 绑定岗位数量必须与请求去重后的岗位数量一致，否则说明存在无效岗位 ID。
+		if len(postIDs) > 0 {
+			var postCount int64
+			if err = tx.Model(&entity.Post{}).Where("id IN ?", postIDs).Count(&postCount).Error; err != nil {
+				logger.Error("创建用户失败：查询岗位失败", zap.String("username", username), zap.Int64s("post_ids", postIDs), zap.Error(err))
+				return errcode.ErrUserPostQueryFailed.WithErr(err)
+			}
+			if postCount != int64(len(postIDs)) {
+				return errcode.ErrUserPostNotFound
+			}
+		}
+
+		// 先创建用户主表记录，拿到自增 ID 后再写关联表。
+		user := entity.User{
+			Username: username,
+			Password: string(passwordHash),
+			Nickname: nickname,
+			Avatar:   avatar,
+			Email:    email,
+			Phone:    phone,
+			Gender:   &gender,
+			DeptID:   req.DeptID,
+			Status:   &status,
+			Remark:   remark,
+		}
+		if err = tx.Create(&user).Error; err != nil {
+			logger.Error("创建用户失败：写入用户失败", zap.String("username", username), zap.Error(err))
+			return errcode.ErrUserCreateFailed.WithErr(err)
+		}
+
+		// 写入用户角色关联；roleIDs 已经提前校验和去重，这里只负责持久化。
+		if len(roleIDs) > 0 {
+			userRoles := make([]entity.UserRole, 0, len(roleIDs))
+			for _, roleID := range roleIDs {
+				userRoles = append(userRoles, entity.UserRole{
+					UserID: user.ID,
+					RoleID: roleID,
+				})
+			}
+			if err = tx.Table(userRoleTable).Create(&userRoles).Error; err != nil {
+				logger.Error("创建用户失败：写入用户角色失败", zap.Int64("user_id", user.ID), zap.Int64s("role_ids", roleIDs), zap.Error(err))
+				return errcode.ErrUserCreateFailed.WithErr(err)
+			}
+		}
+
+		// 写入用户岗位关联；任一插入失败都会回滚用户主表和已写入的关联数据。
+		if len(postIDs) > 0 {
+			userPosts := make([]entity.UserPost, 0, len(postIDs))
+			for _, postID := range postIDs {
+				userPosts = append(userPosts, entity.UserPost{
+					UserID: user.ID,
+					PostID: postID,
+				})
+			}
+			if err = tx.Table(userPostTable).Create(&userPosts).Error; err != nil {
+				logger.Error("创建用户失败：写入用户岗位失败", zap.Int64("user_id", user.ID), zap.Int64s("post_ids", postIDs), zap.Error(err))
+				return errcode.ErrUserCreateFailed.WithErr(err)
+			}
+		}
+
+		return nil
+	})
+}
+
+// Delete 删除用户。
+func (s *Service) Delete(ctx context.Context, req *DeleteReq) error {
+	logger := s.logger
+	userRoleTable := entity.UserRole{}.TableName()
+	userPostTable := entity.UserPost{}.TableName()
+
+	if req == nil || len(req.IDs) == 0 {
+		return errcode.ErrUserDeleteReqNil
+	}
+
+	// 批量删除要求至少传入一个用户 ID，并在入库前完成合法性校验和去重。
+	ids := make([]int64, 0, len(req.IDs))
+	seen := make(map[int64]struct{}, len(req.IDs))
+	for _, id := range req.IDs {
+		if id <= 0 {
+			return errcode.ErrUserIDInvalid
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for start := 0; start < len(ids); start += batchSize {
+			end := start + batchSize
+			if end > len(ids) {
+				end = len(ids)
+			}
+			batchIDs := ids[start:end]
+
+			// 删除前先确认当前分段用户都存在，避免部分 ID 无效时发生半成功删除。
+			var userCount int64
+			if err := tx.Model(&entity.User{}).Where("id IN ?", batchIDs).Count(&userCount).Error; err != nil {
+				logger.Error("删除用户失败：查询用户失败", zap.Int64s("user_ids", batchIDs), zap.Error(err))
+				return errcode.ErrUserQueryFailed.WithErr(err)
+			}
+			if userCount != int64(len(batchIDs)) {
+				return errcode.ErrUserNotFound
+			}
+
+			// 用户角色和岗位关联是普通关联表，需要先按 user_id 清理。
+			if err := tx.Table(userRoleTable).Where("user_id IN ?", batchIDs).Delete(&entity.UserRole{}).Error; err != nil {
+				logger.Error("删除用户失败：删除用户角色失败", zap.Int64s("user_ids", batchIDs), zap.Error(err))
+				return errcode.ErrUserDeleteFailed.WithErr(err)
+			}
+			if err := tx.Table(userPostTable).Where("user_id IN ?", batchIDs).Delete(&entity.UserPost{}).Error; err != nil {
+				logger.Error("删除用户失败：删除用户岗位失败", zap.Int64s("user_ids", batchIDs), zap.Error(err))
+				return errcode.ErrUserDeleteFailed.WithErr(err)
+			}
+
+			// User 使用 soft_delete，Delete 会写入 deleted_at 而不是物理删除用户主表。
+			if err := tx.Where("id IN ?", batchIDs).Delete(&entity.User{}).Error; err != nil {
+				logger.Error("删除用户失败：删除用户失败", zap.Int64s("user_ids", batchIDs), zap.Error(err))
+				return errcode.ErrUserDeleteFailed.WithErr(err)
+			}
+		}
+		return nil
+	})
+}
+
+// Update 更新用户。
+func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
+	logger := s.logger
+	userRoleTable := entity.UserRole{}.TableName()
+	userPostTable := entity.UserPost{}.TableName()
+
+	if req == nil {
+		return errcode.ErrUserUpdateReqNil
+	}
+	if req.ID <= 0 {
+		return errcode.ErrUserIDInvalid
+	}
+
+	// 更新用户需要保留账号的必填语义，并在事务前完成基础字段校验。
+	username := strings.TrimSpace(req.Username)
+	if username == "" {
+		return errcode.ErrUserUsernameRequired
+	}
+	if req.DeptID != nil && *req.DeptID <= 0 {
+		return errcode.ErrUserDeptIDInvalid
+	}
+	if req.Gender != nil && (*req.Gender < 0 || *req.Gender > 2) {
+		return errcode.ErrUserGenderInvalid
+	}
+	if req.Status != nil && (*req.Status != 0 && *req.Status != 1) {
+		return errcode.ErrUserStatusRequired
+	}
+
+	gender := defaultGender
+	if req.Gender != nil {
+		gender = *req.Gender
+	}
+
+	// 可选字符串字段按编辑表单语义整体保存；空字符串视为清空字段。
+	var nickname *string
+	if req.Nickname != nil {
+		value := strings.TrimSpace(*req.Nickname)
+		if value != "" {
+			nickname = &value
+		}
+	}
+	var avatar *string
+	if req.Avatar != nil {
+		value := strings.TrimSpace(*req.Avatar)
+		if value != "" {
+			avatar = &value
+		}
+	}
+	var email *string
+	if req.Email != nil {
+		value := strings.TrimSpace(*req.Email)
+		if value != "" {
+			email = &value
+		}
+	}
+	var phone *string
+	if req.Phone != nil {
+		value := strings.TrimSpace(*req.Phone)
+		if value != "" {
+			phone = &value
+		}
+	}
+	var remark *string
+	if req.Remark != nil {
+		value := strings.TrimSpace(*req.Remark)
+		if value != "" {
+			remark = &value
+		}
+	}
+
+	// 更新角色绑定时先归一化 ID，后续用去重后的集合做存在性校验和替换写入。
+	roleIDs := make([]int64, 0, len(req.RoleIDs))
+	if len(req.RoleIDs) > 0 {
+		seen := make(map[int64]struct{}, len(req.RoleIDs))
+		for _, id := range req.RoleIDs {
+			if id <= 0 {
+				return errcode.ErrUserRoleIDInvalid
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			roleIDs = append(roleIDs, id)
+		}
+	}
+
+	// 岗位绑定同样整体替换，空集合表示清空用户岗位。
+	postIDs := make([]int64, 0, len(req.PostIDs))
+	if len(req.PostIDs) > 0 {
+		seen := make(map[int64]struct{}, len(req.PostIDs))
+		for _, id := range req.PostIDs {
+			if id <= 0 {
+				return errcode.ErrUserPostIDInvalid
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			postIDs = append(postIDs, id)
+		}
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 先确认用户存在，避免后续唯一性检查返回与真实问题不一致的错误。
+		var userCount int64
+		if err := tx.Model(&entity.User{}).Where("id = ?", req.ID).Count(&userCount).Error; err != nil {
+			logger.Error("更新用户失败：查询用户失败", zap.Int64("user_id", req.ID), zap.Error(err))
+			return errcode.ErrUserQueryFailed.WithErr(err)
+		}
+		if userCount == 0 {
+			return errcode.ErrUserNotFound
+		}
+
+		// 账号、邮箱、手机号唯一性检查都排除当前用户自身。
+		var usernameCount int64
+		if err := tx.Model(&entity.User{}).Where("username = ? AND id <> ?", username, req.ID).Count(&usernameCount).Error; err != nil {
+			logger.Error("更新用户失败：查询账号失败", zap.Int64("user_id", req.ID), zap.String("username", username), zap.Error(err))
+			return errcode.ErrUserUsernameQueryFailed.WithErr(err)
+		}
+		if usernameCount > 0 {
+			return errcode.ErrUserUsernameExists
+		}
+
+		if email != nil {
+			var emailCount int64
+			if err := tx.Model(&entity.User{}).Where("email = ? AND id <> ?", *email, req.ID).Count(&emailCount).Error; err != nil {
+				logger.Error("更新用户失败：查询邮箱失败", zap.Int64("user_id", req.ID), zap.String("email", *email), zap.Error(err))
+				return errcode.ErrUserEmailQueryFailed.WithErr(err)
+			}
+			if emailCount > 0 {
+				return errcode.ErrUserEmailExists
+			}
+		}
+
+		if phone != nil {
+			var phoneCount int64
+			if err := tx.Model(&entity.User{}).Where("phone = ? AND id <> ?", *phone, req.ID).Count(&phoneCount).Error; err != nil {
+				logger.Error("更新用户失败：查询手机号失败", zap.Int64("user_id", req.ID), zap.String("phone", *phone), zap.Error(err))
+				return errcode.ErrUserPhoneQueryFailed.WithErr(err)
+			}
+			if phoneCount > 0 {
+				return errcode.ErrUserPhoneExists
+			}
+		}
+
+		if req.DeptID != nil {
+			var deptCount int64
+			if err := tx.Model(&entity.Dept{}).Where("id = ?", *req.DeptID).Count(&deptCount).Error; err != nil {
+				logger.Error("更新用户失败：查询部门失败", zap.Int64("user_id", req.ID), zap.Int64("dept_id", *req.DeptID), zap.Error(err))
+				return errcode.ErrUserDeptQueryFailed.WithErr(err)
+			}
+			if deptCount == 0 {
+				return errcode.ErrUserDeptNotFound
+			}
+		}
+
+		if len(roleIDs) > 0 {
+			var roleCount int64
+			if err := tx.Model(&entity.Role{}).Where("id IN ?", roleIDs).Count(&roleCount).Error; err != nil {
+				logger.Error("更新用户失败：查询角色失败", zap.Int64("user_id", req.ID), zap.Int64s("role_ids", roleIDs), zap.Error(err))
+				return errcode.ErrUserRoleQueryFailed.WithErr(err)
+			}
+			if roleCount != int64(len(roleIDs)) {
+				return errcode.ErrUserRoleNotFound
+			}
+		}
+
+		if len(postIDs) > 0 {
+			var postCount int64
+			if err := tx.Model(&entity.Post{}).Where("id IN ?", postIDs).Count(&postCount).Error; err != nil {
+				logger.Error("更新用户失败：查询岗位失败", zap.Int64("user_id", req.ID), zap.Int64s("post_ids", postIDs), zap.Error(err))
+				return errcode.ErrUserPostQueryFailed.WithErr(err)
+			}
+			if postCount != int64(len(postIDs)) {
+				return errcode.ErrUserPostNotFound
+			}
+		}
+
+		updates := map[string]any{
+			"username": username,
+			"nickname": nickname,
+			"avatar":   avatar,
+			"email":    email,
+			"phone":    phone,
+			"gender":   gender,
+			"dept_id":  req.DeptID,
+			"remark":   remark,
+		}
+		if req.Status != nil {
+			updates["status"] = *req.Status
+		}
+
+		if err := tx.Model(&entity.User{}).Where("id = ?", req.ID).Updates(updates).Error; err != nil {
+			logger.Error("更新用户失败：写入用户失败", zap.Int64("user_id", req.ID), zap.Error(err))
+			return errcode.ErrUserUpdateFailed.WithErr(err)
+		}
+
+		if err := tx.Table(userRoleTable).Where("user_id = ?", req.ID).Delete(&entity.UserRole{}).Error; err != nil {
+			logger.Error("更新用户失败：删除用户角色失败", zap.Int64("user_id", req.ID), zap.Error(err))
+			return errcode.ErrUserUpdateFailed.WithErr(err)
+		}
+		if len(roleIDs) > 0 {
+			userRoles := make([]entity.UserRole, 0, len(roleIDs))
+			for _, roleID := range roleIDs {
+				userRoles = append(userRoles, entity.UserRole{
+					UserID: req.ID,
+					RoleID: roleID,
+				})
+			}
+			if err := tx.Table(userRoleTable).Create(&userRoles).Error; err != nil {
+				logger.Error("更新用户失败：写入用户角色失败", zap.Int64("user_id", req.ID), zap.Int64s("role_ids", roleIDs), zap.Error(err))
+				return errcode.ErrUserUpdateFailed.WithErr(err)
+			}
+		}
+
+		if err := tx.Table(userPostTable).Where("user_id = ?", req.ID).Delete(&entity.UserPost{}).Error; err != nil {
+			logger.Error("更新用户失败：删除用户岗位失败", zap.Int64("user_id", req.ID), zap.Error(err))
+			return errcode.ErrUserUpdateFailed.WithErr(err)
+		}
+		if len(postIDs) > 0 {
+			userPosts := make([]entity.UserPost, 0, len(postIDs))
+			for _, postID := range postIDs {
+				userPosts = append(userPosts, entity.UserPost{
+					UserID: req.ID,
+					PostID: postID,
+				})
+			}
+			if err := tx.Table(userPostTable).Create(&userPosts).Error; err != nil {
+				logger.Error("更新用户失败：写入用户岗位失败", zap.Int64("user_id", req.ID), zap.Int64s("post_ids", postIDs), zap.Error(err))
+				return errcode.ErrUserUpdateFailed.WithErr(err)
+			}
+		}
+
+		return nil
+	})
+}
+
+// List 查询用户列表。
+func (s *Service) List(ctx context.Context, req *ListReq) (*ListResp, error) {
+	logger := s.logger
+	deptTable := entity.Dept{}.TableName()
+	type listRow struct {
+		ID        int64     `gorm:"column:id"`
+		Username  string    `gorm:"column:username"`
+		Nickname  *string   `gorm:"column:nickname"`
+		Avatar    *string   `gorm:"column:avatar"`
+		Email     *string   `gorm:"column:email"`
+		Phone     *string   `gorm:"column:phone"`
+		Gender    *int      `gorm:"column:gender"`
+		DeptID    *int64    `gorm:"column:dept_id"`
+		DeptName  *string   `gorm:"column:dept_name"`
+		Status    *int      `gorm:"column:status"`
+		Remark    *string   `gorm:"column:remark"`
+		CreatedAt time.Time `gorm:"column:created_at"`
+		UpdatedAt time.Time `gorm:"column:updated_at"`
+	}
+
+	page := defaultListPage
+	size := defaultListSize
+	var username string
+	var status *int
+	var deptID *int64
+	var gender *int
+
+	if req != nil {
+		if req.Page > 0 {
+			page = req.Page
+		}
+		if req.Size > 0 {
+			size = req.Size
+		}
+		username = strings.TrimSpace(req.Username)
+		status = req.Status
+		if req.DeptID != nil {
+			if *req.DeptID <= 0 {
+				return nil, errcode.ErrUserDeptIDInvalid
+			}
+			deptID = req.DeptID
+		}
+		if req.Gender != nil {
+			if *req.Gender < 0 || *req.Gender > 2 {
+				return nil, errcode.ErrUserGenderInvalid
+			}
+			gender = req.Gender
+		}
+	}
+	if size > maxListSize {
+		size = maxListSize
+	}
+
+	query := s.db.WithContext(ctx).Table(entity.User{}.TableName()+" AS u").Where("u.deleted_at = ?", 0)
+	if username != "" {
+		query = query.Where("u.username LIKE ?", "%"+username+"%")
+	}
+	if status != nil {
+		query = query.Where("u.status = ?", *status)
+	}
+	if deptID != nil {
+		query = query.Where("u.dept_id = ?", *deptID)
+	}
+	if gender != nil {
+		query = query.Where("u.gender = ?", *gender)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		logger.Error("查询用户列表失败：统计用户失败", zap.Error(err))
+		return nil, errcode.ErrUserListQueryFailed.WithErr(err)
+	}
+
+	var rows []listRow
+	if err := query.
+		Select("u.id, u.username, u.nickname, u.avatar, u.email, u.phone, u.gender, u.dept_id, d.name AS dept_name, u.status, u.remark, u.created_at, u.updated_at").
+		Joins("LEFT JOIN "+deptTable+" AS d ON d.id = u.dept_id AND d.deleted_at = ?", 0).
+		Order("u.id DESC").
+		Limit(size).
+		Offset((page - 1) * size).
+		Find(&rows).Error; err != nil {
+		logger.Error("查询用户列表失败：查询用户失败", zap.Int("page", page), zap.Int("size", size), zap.Error(err))
+		return nil, errcode.ErrUserListQueryFailed.WithErr(err)
+	}
+
+	items := make([]*ListItemResp, 0, len(rows))
+	for i := range rows {
+		item := &ListItemResp{
+			ID:        rows[i].ID,
+			Username:  rows[i].Username,
+			Nickname:  rows[i].Nickname,
+			Avatar:    rows[i].Avatar,
+			Email:     rows[i].Email,
+			Phone:     rows[i].Phone,
+			Gender:    rows[i].Gender,
+			DeptID:    rows[i].DeptID,
+			DeptName:  rows[i].DeptName,
+			Status:    rows[i].Status,
+			Remark:    rows[i].Remark,
+			CreatedAt: rows[i].CreatedAt,
+			UpdatedAt: rows[i].UpdatedAt,
+		}
+		items = append(items, item)
+	}
+
+	return &ListResp{
+		Total: total,
+		List:  items,
+	}, nil
+}
+
+// Detail 查询用户详情。
+func (s *Service) Detail(ctx context.Context, req *DetailReq) (*DetailResp, error) {
+	logger := s.logger
+	deptTable := entity.Dept{}.TableName()
+	roleTable := entity.Role{}.TableName()
+	postTable := entity.Post{}.TableName()
+	userRoleTable := entity.UserRole{}.TableName()
+	userPostTable := entity.UserPost{}.TableName()
+	type detailRow struct {
+		ID        int64     `gorm:"column:id"`
+		Username  string    `gorm:"column:username"`
+		Nickname  *string   `gorm:"column:nickname"`
+		Avatar    *string   `gorm:"column:avatar"`
+		Email     *string   `gorm:"column:email"`
+		Phone     *string   `gorm:"column:phone"`
+		Gender    *int      `gorm:"column:gender"`
+		DeptID    *int64    `gorm:"column:dept_id"`
+		DeptName  *string   `gorm:"column:dept_name"`
+		Status    *int      `gorm:"column:status"`
+		Remark    *string   `gorm:"column:remark"`
+		CreatedAt time.Time `gorm:"column:created_at"`
+		UpdatedAt time.Time `gorm:"column:updated_at"`
+	}
+
+	if req == nil {
+		return nil, errcode.ErrUserDetailReqNil
+	}
+	if req.ID <= 0 {
+		return nil, errcode.ErrUserIDInvalid
+	}
+
+	var row detailRow
+	if err := s.db.WithContext(ctx).
+		Table(entity.User{}.TableName()+" AS u").
+		Select("u.id, u.username, u.nickname, u.avatar, u.email, u.phone, u.gender, u.dept_id, d.name AS dept_name, u.status, u.remark, u.created_at, u.updated_at").
+		Joins("LEFT JOIN "+deptTable+" AS d ON d.id = u.dept_id AND d.deleted_at = ?", 0).
+		Where("u.id = ? AND u.deleted_at = ?", req.ID, 0).
+		Take(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errcode.ErrUserNotFound
+		}
+		logger.Error("查询用户详情失败：查询用户失败", zap.Int64("user_id", req.ID), zap.Error(err))
+		return nil, errcode.ErrUserQueryFailed.WithErr(err)
+	}
+
+	var roles []*RoleInfoResp
+	if err := s.db.WithContext(ctx).
+		Table(userRoleTable+" AS ur").
+		Select("r.id, r.name, r.code").
+		Joins("INNER JOIN "+roleTable+" AS r ON r.id = ur.role_id AND r.deleted_at = ?", 0).
+		Where("ur.user_id = ?", req.ID).
+		Order("r.id ASC").
+		Find(&roles).Error; err != nil {
+		logger.Error("查询用户详情失败：查询用户角色失败", zap.Int64("user_id", req.ID), zap.Error(err))
+		return nil, errcode.ErrUserRoleQueryFailed.WithErr(err)
+	}
+	roleIDs := make([]int64, 0, len(roles))
+	for _, role := range roles {
+		roleIDs = append(roleIDs, role.ID)
+	}
+
+	var posts []*PostInfoResp
+	if err := s.db.WithContext(ctx).
+		Table(userPostTable+" AS up").
+		Select("p.id, p.name, p.code").
+		Joins("INNER JOIN "+postTable+" AS p ON p.id = up.post_id AND p.deleted_at = ?", 0).
+		Where("up.user_id = ?", req.ID).
+		Order("p.id ASC").
+		Find(&posts).Error; err != nil {
+		logger.Error("查询用户详情失败：查询用户岗位失败", zap.Int64("user_id", req.ID), zap.Error(err))
+		return nil, errcode.ErrUserPostQueryFailed.WithErr(err)
+	}
+	postIDs := make([]int64, 0, len(posts))
+	for _, post := range posts {
+		postIDs = append(postIDs, post.ID)
+	}
+
+	return &DetailResp{
+		ID:        row.ID,
+		Username:  row.Username,
+		Nickname:  row.Nickname,
+		Avatar:    row.Avatar,
+		Email:     row.Email,
+		Phone:     row.Phone,
+		Gender:    row.Gender,
+		DeptID:    row.DeptID,
+		DeptName:  row.DeptName,
+		RoleIDs:   roleIDs,
+		Roles:     roles,
+		PostIDs:   postIDs,
+		Posts:     posts,
+		Status:    row.Status,
+		Remark:    row.Remark,
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
+	}, nil
+}
+
+// UpdateStatus 更新用户状态。
+func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) error {
+	logger := s.logger
+
+	if req == nil {
+		return errcode.ErrUserUpdateStatusReqNil
+	}
+	if len(req.IDs) == 0 {
+		return errcode.ErrUserIDsRequired
+	}
+	if req.Status == nil || (*req.Status != 0 && *req.Status != 1) {
+		return errcode.ErrUserStatusRequired
+	}
+
+	ids := make([]int64, 0, len(req.IDs))
+	seen := make(map[int64]struct{}, len(req.IDs))
+	for _, id := range req.IDs {
+		if id <= 0 {
+			return errcode.ErrUserIDInvalid
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for start := 0; start < len(ids); start += batchSize {
+			end := start + batchSize
+			if end > len(ids) {
+				end = len(ids)
+			}
+			batchIDs := ids[start:end]
+
+			var userCount int64
+			if err := tx.Model(&entity.User{}).Where("id IN ?", batchIDs).Count(&userCount).Error; err != nil {
+				logger.Error("更新用户状态失败：查询用户失败", zap.Int64s("user_ids", batchIDs), zap.Error(err))
+				return errcode.ErrUserQueryFailed.WithErr(err)
+			}
+			if userCount != int64(len(batchIDs)) {
+				return errcode.ErrUserNotFound
+			}
+
+			if err := tx.Model(&entity.User{}).Where("id IN ?", batchIDs).Update("status", *req.Status).Error; err != nil {
+				logger.Error("更新用户状态失败：写入用户失败", zap.Int64s("user_ids", batchIDs), zap.Int("status", *req.Status), zap.Error(err))
+				return errcode.ErrUserUpdateStatusFailed.WithErr(err)
+			}
+		}
+		return nil
+	})
+}
+
+// ResetPassword 重置用户密码。
+func (s *Service) ResetPassword(ctx context.Context, req *ResetPasswordReq) error {
+	logger := s.logger
+
+	if req == nil {
+		return errcode.ErrUserResetPasswordReqNil
+	}
+	if req.ID <= 0 {
+		return errcode.ErrUserIDInvalid
+	}
+	password := strings.TrimSpace(req.Password)
+	if password == "" {
+		return errcode.ErrUserPasswordRequired
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		logger.Error("重置用户密码失败：密码摘要生成失败", zap.Int64("user_id", req.ID), zap.Error(err))
+		return errcode.ErrUserResetPasswordFailed.WithErr(err)
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var userCount int64
+		if err := tx.Model(&entity.User{}).Where("id = ?", req.ID).Count(&userCount).Error; err != nil {
+			logger.Error("重置用户密码失败：查询用户失败", zap.Int64("user_id", req.ID), zap.Error(err))
+			return errcode.ErrUserQueryFailed.WithErr(err)
+		}
+		if userCount == 0 {
+			return errcode.ErrUserNotFound
+		}
+
+		if err := tx.Model(&entity.User{}).Where("id = ?", req.ID).Update("password", string(passwordHash)).Error; err != nil {
+			logger.Error("重置用户密码失败：写入用户失败", zap.Int64("user_id", req.ID), zap.Error(err))
+			return errcode.ErrUserResetPasswordFailed.WithErr(err)
+		}
+		return nil
+	})
+}
+
+// AssignRoles 分配用户角色。
+func (s *Service) AssignRoles(ctx context.Context, req *AssignRolesReq) error {
+	logger := s.logger
+	userRoleTable := entity.UserRole{}.TableName()
+
+	if req == nil {
+		return errcode.ErrUserAssignRolesReqNil
+	}
+	if req.ID <= 0 {
+		return errcode.ErrUserIDInvalid
+	}
+
+	roleIDs := make([]int64, 0, len(req.RoleIDs))
+	if len(req.RoleIDs) > 0 {
+		seen := make(map[int64]struct{}, len(req.RoleIDs))
+		for _, id := range req.RoleIDs {
+			if id <= 0 {
+				return errcode.ErrUserRoleIDInvalid
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			roleIDs = append(roleIDs, id)
+		}
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var userCount int64
+		if err := tx.Model(&entity.User{}).Where("id = ?", req.ID).Count(&userCount).Error; err != nil {
+			logger.Error("分配用户角色失败：查询用户失败", zap.Int64("user_id", req.ID), zap.Error(err))
+			return errcode.ErrUserQueryFailed.WithErr(err)
+		}
+		if userCount == 0 {
+			return errcode.ErrUserNotFound
+		}
+
+		if len(roleIDs) > 0 {
+			var roleCount int64
+			if err := tx.Model(&entity.Role{}).Where("id IN ?", roleIDs).Count(&roleCount).Error; err != nil {
+				logger.Error("分配用户角色失败：查询角色失败", zap.Int64("user_id", req.ID), zap.Int64s("role_ids", roleIDs), zap.Error(err))
+				return errcode.ErrUserRoleQueryFailed.WithErr(err)
+			}
+			if roleCount != int64(len(roleIDs)) {
+				return errcode.ErrUserRoleNotFound
+			}
+		}
+
+		if err := tx.Table(userRoleTable).Where("user_id = ?", req.ID).Delete(&entity.UserRole{}).Error; err != nil {
+			logger.Error("分配用户角色失败：删除用户角色失败", zap.Int64("user_id", req.ID), zap.Error(err))
+			return errcode.ErrUserAssignRolesFailed.WithErr(err)
+		}
+		if len(roleIDs) == 0 {
+			return nil
+		}
+
+		userRoles := make([]entity.UserRole, 0, len(roleIDs))
+		for _, roleID := range roleIDs {
+			userRoles = append(userRoles, entity.UserRole{
+				UserID: req.ID,
+				RoleID: roleID,
+			})
+		}
+		if err := tx.Table(userRoleTable).Create(&userRoles).Error; err != nil {
+			logger.Error("分配用户角色失败：写入用户角色失败", zap.Int64("user_id", req.ID), zap.Int64s("role_ids", roleIDs), zap.Error(err))
+			return errcode.ErrUserAssignRolesFailed.WithErr(err)
+		}
+		return nil
+	})
+}
