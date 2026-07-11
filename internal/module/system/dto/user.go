@@ -16,8 +16,8 @@ type UserCreateReq struct {
 	Email *string `json:"email" form:"email"`
 	// Phone 是用户手机号。
 	Phone *string `json:"phone" form:"phone"`
-	// Gender 是用户性别。
-	Gender *string `json:"gender" form:"gender"`
+	// Gender 是用户性别，0 表示未知，1 表示男，2 表示女。
+	Gender *int `json:"gender" form:"gender"`
 	// DeptID 是用户所属部门 ID。
 	DeptID *int64 `json:"dept_id" form:"dept_id"`
 	// RoleIDs 是用户绑定的角色 ID 集合。
@@ -50,8 +50,8 @@ type UserUpdateReq struct {
 	Email *string `json:"email" form:"email"`
 	// Phone 是用户手机号。
 	Phone *string `json:"phone" form:"phone"`
-	// Gender 是用户性别。
-	Gender *string `json:"gender" form:"gender"`
+	// Gender 是用户性别，0 表示未知，1 表示男，2 表示女。
+	Gender *int `json:"gender" form:"gender"`
 	// DeptID 是用户所属部门 ID。
 	DeptID *int64 `json:"dept_id" form:"dept_id"`
 	// RoleIDs 是用户绑定的角色 ID 集合。
@@ -102,8 +102,8 @@ type UserListItemResp struct {
 	Email *string `json:"email"`
 	// Phone 是用户手机号。
 	Phone *string `json:"phone"`
-	// Gender 是用户性别。
-	Gender *string `json:"gender"`
+	// Gender 是用户性别，0 表示未知，1 表示男，2 表示女。
+	Gender *int `json:"gender"`
 	// DeptID 是用户所属部门 ID。
 	DeptID *int64 `json:"dept_id"`
 	// Status 是用户状态，1 表示启用，0 表示禁用。
@@ -136,8 +136,8 @@ type UserDetailResp struct {
 	Email *string `json:"email"`
 	// Phone 是用户手机号。
 	Phone *string `json:"phone"`
-	// Gender 是用户性别。
-	Gender *string `json:"gender"`
+	// Gender 是用户性别，0 表示未知，1 表示男，2 表示女。
+	Gender *int `json:"gender"`
 	// DeptID 是用户所属部门 ID。
 	DeptID *int64 `json:"dept_id"`
 	// RoleIDs 是用户绑定的角色 ID 集合。

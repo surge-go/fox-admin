@@ -305,7 +305,7 @@ func (auditHandler) HandleAuthEvent(ctx context.Context, event auth.Event) error
 
 **当前包内不内置事件订阅者**。`pkg/auth` 只定义事件契约，使用方需自行实现 `EventHandler` 并通过 `Config.EventHandler` 注入；典型用途包括：
 
-- 写 `SysLoginLog` / `SysOperLog` 审计表。
+- 写 `LoginLog` / `OperLog` 审计表。
 - 通过 `SessionRevokedEvent` 通知 realtime 模块执行 WebSocket 踢下线。
 - 通过 `LoginConflictEvent` 记录安全告警。
 - 通过 `RefreshReusedEvent` 触发密码改写或 session 强制吊销。

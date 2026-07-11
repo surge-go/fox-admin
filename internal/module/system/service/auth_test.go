@@ -13,8 +13,8 @@ import (
 	"fox-admin/pkg/ptr"
 
 	"github.com/alicebob/miniredis/v2"
-	foxerrors "github.com/surge-go/fox/core/errors"
 	"github.com/redis/go-redis/v9"
+	foxerrors "github.com/surge-go/fox/core/errors"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -282,7 +282,7 @@ func newAuthFixture(t *testing.T, setup func(*sysUserTestRow)) (*AuthService, *a
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
 	}
-	user := &entity.SysUser{
+	user := &entity.User{
 		Username: row.Username,
 		Password: hash,
 		Status:   row.Status,

@@ -6,8 +6,8 @@ import (
 	"gorm.io/plugin/soft_delete"
 )
 
-// SysPost 表示系统岗位表。
-type SysPost struct {
+// Post 表示系统岗位表。
+type Post struct {
 	// ID 是岗位主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// Name 是岗位名称。
@@ -29,6 +29,6 @@ type SysPost struct {
 }
 
 // TableName 返回系统岗位表名。
-func (SysPost) TableName() string {
-	return "sys_post"
+func (Post) TableName() string {
+	return tableName("sys_post")
 }

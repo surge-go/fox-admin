@@ -54,7 +54,7 @@ func TestUserServiceCreateSavesUserAndBindings(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	var user entity.SysUser
+	var user entity.User
 	if err := service.db.Where("username = ?", "admin").First(&user).Error; err != nil {
 		t.Fatalf("query user: %v", err)
 	}
@@ -107,10 +107,10 @@ func TestUserServiceDeleteRemovesBindingsAndSoftDeletesUser(t *testing.T) {
 	role := createUserTestRole(t, service.db, "管理员", "admin")
 	post := createUserTestPost(t, service.db, "开发", "dev")
 	user := createUserTestUser(t, service.db, "admin")
-	if err := service.db.Create(&entity.SysUserRole{UserID: user.ID, RoleID: role.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.UserRole{UserID: user.ID, RoleID: role.ID}).Error; err != nil {
 		t.Fatalf("create user role: %v", err)
 	}
-	if err := service.db.Create(&entity.SysUserPost{UserID: user.ID, PostID: post.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.UserPost{UserID: user.ID, PostID: post.ID}).Error; err != nil {
 		t.Fatalf("create user post: %v", err)
 	}
 
@@ -119,7 +119,7 @@ func TestUserServiceDeleteRemovesBindingsAndSoftDeletesUser(t *testing.T) {
 	}
 
 	var count int64
-	if err := service.db.Model(&entity.SysUser{}).Where("id = ?", user.ID).Count(&count).Error; err != nil {
+	if err := service.db.Model(&entity.User{}).Where("id = ?", user.ID).Count(&count).Error; err != nil {
 		t.Fatalf("count user: %v", err)
 	}
 	if count != 0 {
@@ -140,10 +140,10 @@ func TestUserServiceUpdateSavesUserAndReplacesBindings(t *testing.T) {
 	oldPost := createUserTestPost(t, service.db, "开发", "dev")
 	newPost := createUserTestPost(t, service.db, "测试", "qa")
 	user := createUserTestUser(t, service.db, "admin")
-	if err := service.db.Create(&entity.SysUserRole{UserID: user.ID, RoleID: oldRole.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.UserRole{UserID: user.ID, RoleID: oldRole.ID}).Error; err != nil {
 		t.Fatalf("create old role: %v", err)
 	}
-	if err := service.db.Create(&entity.SysUserPost{UserID: user.ID, PostID: oldPost.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.UserPost{UserID: user.ID, PostID: oldPost.ID}).Error; err != nil {
 		t.Fatalf("create old post: %v", err)
 	}
 	disabled := 0
@@ -161,7 +161,7 @@ func TestUserServiceUpdateSavesUserAndReplacesBindings(t *testing.T) {
 		t.Fatalf("Update() error = %v", err)
 	}
 
-	var got entity.SysUser
+	var got entity.User
 	if err := service.db.First(&got, user.ID).Error; err != nil {
 		t.Fatalf("query user: %v", err)
 	}
@@ -196,10 +196,10 @@ func TestUserServiceDetailReturnsBindings(t *testing.T) {
 	role := createUserTestRole(t, service.db, "管理员", "admin")
 	post := createUserTestPost(t, service.db, "开发", "dev")
 	user := createUserTestUser(t, service.db, "admin")
-	if err := service.db.Create(&entity.SysUserRole{UserID: user.ID, RoleID: role.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.UserRole{UserID: user.ID, RoleID: role.ID}).Error; err != nil {
 		t.Fatalf("create user role: %v", err)
 	}
-	if err := service.db.Create(&entity.SysUserPost{UserID: user.ID, PostID: post.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.UserPost{UserID: user.ID, PostID: post.ID}).Error; err != nil {
 		t.Fatalf("create user post: %v", err)
 	}
 
@@ -228,7 +228,7 @@ func TestUserServiceUpdateStatusResetPasswordAndAssignRoles(t *testing.T) {
 		t.Fatalf("AssignRoles() error = %v", err)
 	}
 
-	var got entity.SysUser
+	var got entity.User
 	if err := service.db.First(&got, user.ID).Error; err != nil {
 		t.Fatalf("query user: %v", err)
 	}
@@ -250,12 +250,12 @@ func newTestUserService(t *testing.T) *UserService {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&entity.SysUser{},
-		&entity.SysDept{},
-		&entity.SysPost{},
-		&entity.SysRole{},
-		&entity.SysUserRole{},
-		&entity.SysUserPost{},
+		&entity.User{},
+		&entity.Dept{},
+		&entity.Post{},
+		&entity.Role{},
+		&entity.UserRole{},
+		&entity.UserPost{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -269,19 +269,19 @@ func validUserCreateReq() *dto.UserCreateReq {
 	}
 }
 
-func createUserTestUser(t *testing.T, db *gorm.DB, username string) *entity.SysUser {
+func createUserTestUser(t *testing.T, db *gorm.DB, username string) *entity.User {
 	t.Helper()
 	return createUserTestUserWithStatus(t, db, username, defaultUserStatus)
 }
 
-func createUserTestUserWithStatus(t *testing.T, db *gorm.DB, username string, status int) *entity.SysUser {
+func createUserTestUserWithStatus(t *testing.T, db *gorm.DB, username string, status int) *entity.User {
 	t.Helper()
 
 	passwordHash, err := hashPassword("password")
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
 	}
-	user := &entity.SysUser{
+	user := &entity.User{
 		Username: username,
 		Password: passwordHash,
 		Status:   ptr.Of(status),
@@ -292,10 +292,10 @@ func createUserTestUserWithStatus(t *testing.T, db *gorm.DB, username string, st
 	return user
 }
 
-func createUserTestDept(t *testing.T, db *gorm.DB, name string) *entity.SysDept {
+func createUserTestDept(t *testing.T, db *gorm.DB, name string) *entity.Dept {
 	t.Helper()
 
-	dept := &entity.SysDept{
+	dept := &entity.Dept{
 		Name:   name,
 		Status: ptr.Of(defaultUserStatus),
 	}
@@ -305,10 +305,10 @@ func createUserTestDept(t *testing.T, db *gorm.DB, name string) *entity.SysDept 
 	return dept
 }
 
-func createUserTestRole(t *testing.T, db *gorm.DB, name string, code string) *entity.SysRole {
+func createUserTestRole(t *testing.T, db *gorm.DB, name string, code string) *entity.Role {
 	t.Helper()
 
-	role := &entity.SysRole{
+	role := &entity.Role{
 		Name:      name,
 		Code:      code,
 		DataScope: ptr.Of(defaultRoleDataScope),
@@ -320,10 +320,10 @@ func createUserTestRole(t *testing.T, db *gorm.DB, name string, code string) *en
 	return role
 }
 
-func createUserTestPost(t *testing.T, db *gorm.DB, name string, code string) *entity.SysPost {
+func createUserTestPost(t *testing.T, db *gorm.DB, name string, code string) *entity.Post {
 	t.Helper()
 
-	post := &entity.SysPost{
+	post := &entity.Post{
 		Name:   name,
 		Code:   code,
 		Status: ptr.Of(defaultUserStatus),
@@ -338,7 +338,7 @@ func userRoleIDsForTest(t *testing.T, db *gorm.DB, userID int64) []int64 {
 	t.Helper()
 
 	var roleIDs []int64
-	if err := db.Model(&entity.SysUserRole{}).Where("user_id = ?", userID).Order("role_id ASC").Pluck("role_id", &roleIDs).Error; err != nil {
+	if err := db.Model(&entity.UserRole{}).Where("user_id = ?", userID).Order("role_id ASC").Pluck("role_id", &roleIDs).Error; err != nil {
 		t.Fatalf("query user roles: %v", err)
 	}
 	return roleIDs
@@ -348,7 +348,7 @@ func userPostIDsForTest(t *testing.T, db *gorm.DB, userID int64) []int64 {
 	t.Helper()
 
 	var postIDs []int64
-	if err := db.Model(&entity.SysUserPost{}).Where("user_id = ?", userID).Order("post_id ASC").Pluck("post_id", &postIDs).Error; err != nil {
+	if err := db.Model(&entity.UserPost{}).Where("user_id = ?", userID).Order("post_id ASC").Pluck("post_id", &postIDs).Error; err != nil {
 		t.Fatalf("query user posts: %v", err)
 	}
 	return postIDs

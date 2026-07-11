@@ -315,12 +315,12 @@ func newAuthTestEngineWithTTL(t *testing.T, accessTTL time.Duration) (*fox.Engin
 		t.Fatalf("open sqlite: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&entity.SysUser{},
-		&entity.SysDept{},
-		&entity.SysPost{},
-		&entity.SysRole{},
-		&entity.SysUserRole{},
-		&entity.SysUserPost{},
+		&entity.User{},
+		&entity.Dept{},
+		&entity.Post{},
+		&entity.Role{},
+		&entity.UserRole{},
+		&entity.UserPost{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -341,13 +341,13 @@ func newAuthTestEngineWithTTL(t *testing.T, accessTTL time.Duration) (*fox.Engin
 	return engine, db, manager, cleanup
 }
 
-func createAuthTestUser(t *testing.T, db *gorm.DB, username, password string) *entity.SysUser {
+func createAuthTestUser(t *testing.T, db *gorm.DB, username, password string) *entity.User {
 	t.Helper()
 	hash, err := hashAuthTestPassword(password)
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
 	}
-	user := &entity.SysUser{
+	user := &entity.User{
 		Username: username,
 		Password: hash,
 		Status:   ptr.Of(1),

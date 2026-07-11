@@ -33,7 +33,7 @@ func TestUserHandlerCreateBindsRequest(t *testing.T) {
 		t.Fatalf("body = %s, want success response", body)
 	}
 
-	var user entity.SysUser
+	var user entity.User
 	if err := db.Where("username = ?", "admin").First(&user).Error; err != nil {
 		t.Fatalf("query created user: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestUserHandlerUpdateBindsRequest(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
 	}
 
-	var got entity.SysUser
+	var got entity.User
 	if err := db.First(&got, user.ID).Error; err != nil {
 		t.Fatalf("query updated user: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestUserHandlerUpdateStatusResetPasswordAndAssignRoles(t *testing.T) {
 		t.Fatalf("assign roles status = %d, want 200; body = %s", roleRec.Code, roleRec.Body.String())
 	}
 
-	var got entity.SysUser
+	var got entity.User
 	if err := db.First(&got, user.ID).Error; err != nil {
 		t.Fatalf("query user: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestUserHandlerUpdateStatusResetPasswordAndAssignRoles(t *testing.T) {
 		t.Fatalf("user = %#v, want 0 and hashed new password", got)
 	}
 	var count int64
-	if err := db.Model(&entity.SysUserRole{}).Where("user_id = ? AND role_id = ?", user.ID, role.ID).Count(&count).Error; err != nil {
+	if err := db.Model(&entity.UserRole{}).Where("user_id = ? AND role_id = ?", user.ID, role.ID).Count(&count).Error; err != nil {
 		t.Fatalf("count user role: %v", err)
 	}
 	if count != 1 {
@@ -192,14 +192,14 @@ func newTestUserEngine(t *testing.T) (*fox.Engine, *gorm.DB) {
 	return engine, db
 }
 
-func createTestUser(t *testing.T, db *gorm.DB, username string) *entity.SysUser {
+func createTestUser(t *testing.T, db *gorm.DB, username string) *entity.User {
 	t.Helper()
 
 	password, err := hashTestPassword("password")
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
 	}
-	user := &entity.SysUser{
+	user := &entity.User{
 		Username: username,
 		Password: password,
 		Status:   ptr.Of(1),
@@ -222,10 +222,10 @@ func verifyTestPassword(hash string, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
-func createTestPost(t *testing.T, db *gorm.DB, name string, code string) *entity.SysPost {
+func createTestPost(t *testing.T, db *gorm.DB, name string, code string) *entity.Post {
 	t.Helper()
 
-	post := &entity.SysPost{
+	post := &entity.Post{
 		Name:   name,
 		Code:   code,
 		Status: ptr.Of(1),

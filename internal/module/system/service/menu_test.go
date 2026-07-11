@@ -50,7 +50,7 @@ func TestMenuServiceCreateSavesMenu(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	var got entity.SysMenu
+	var got entity.Menu
 	if err := service.db.Where("path = ?", "/system/user").First(&got).Error; err != nil {
 		t.Fatalf("query menu: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestMenuServiceDeleteRejectsMenuWithChildren(t *testing.T) {
 func TestMenuServiceDeleteRejectsRoleBinding(t *testing.T) {
 	service := newTestMenuService(t)
 	menu := createTestMenu(t, service.db, "system", "/system", 0)
-	if err := service.db.Create(&entity.SysRoleMenu{RoleID: 1, MenuID: menu.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.RoleMenu{RoleID: 1, MenuID: menu.ID}).Error; err != nil {
 		t.Fatalf("create role menu: %v", err)
 	}
 
@@ -172,7 +172,7 @@ func TestMenuServiceDeleteSoftDeletesMenu(t *testing.T) {
 	}
 
 	var count int64
-	if err := service.db.Model(&entity.SysMenu{}).Where("id = ?", menu.ID).Count(&count).Error; err != nil {
+	if err := service.db.Model(&entity.Menu{}).Where("id = ?", menu.ID).Count(&count).Error; err != nil {
 		t.Fatalf("count active menu: %v", err)
 	}
 	if count != 0 {
@@ -180,7 +180,7 @@ func TestMenuServiceDeleteSoftDeletesMenu(t *testing.T) {
 	}
 
 	if err := service.db.Unscoped().
-		Model(&entity.SysMenu{}).
+		Model(&entity.Menu{}).
 		Where("id = ? AND deleted_at > 0", menu.ID).
 		Count(&count).Error; err != nil {
 		t.Fatalf("count soft deleted menu: %v", err)
@@ -307,7 +307,7 @@ func TestMenuServiceUpdateSavesMenu(t *testing.T) {
 		t.Fatalf("Update() error = %v", err)
 	}
 
-	var got entity.SysMenu
+	var got entity.Menu
 	if err := service.db.First(&got, menu.ID).Error; err != nil {
 		t.Fatalf("query updated menu: %v", err)
 	}
@@ -547,23 +547,23 @@ func newTestMenuService(t *testing.T) *MenuService {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&entity.SysMenu{}, &entity.SysRoleMenu{}); err != nil {
+	if err := db.AutoMigrate(&entity.Menu{}, &entity.RoleMenu{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
 	return &MenuService{db: db, logger: zap.NewNop()}
 }
 
-func createTestMenu(t *testing.T, db *gorm.DB, name string, path string, parentID int64) *entity.SysMenu {
+func createTestMenu(t *testing.T, db *gorm.DB, name string, path string, parentID int64) *entity.Menu {
 	t.Helper()
 
 	return createTestMenuWithOptions(t, db, name, path, parentID, nil, nil, nil)
 }
 
-func createTestMenuWithOptions(t *testing.T, db *gorm.DB, name string, path string, parentID int64, sort *int, permissions []string, status *int) *entity.SysMenu {
+func createTestMenuWithOptions(t *testing.T, db *gorm.DB, name string, path string, parentID int64, sort *int, permissions []string, status *int) *entity.Menu {
 	t.Helper()
 
-	menu := &entity.SysMenu{
+	menu := &entity.Menu{
 		ParentID:    parentID,
 		Path:        path,
 		Name:        name,

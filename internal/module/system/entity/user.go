@@ -6,8 +6,8 @@ import (
 	"gorm.io/plugin/soft_delete"
 )
 
-// SysUser 表示系统用户表。
-type SysUser struct {
+// User 表示系统用户表。
+type User struct {
 	// ID 是用户主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// Username 是登录账号。
@@ -22,8 +22,8 @@ type SysUser struct {
 	Email *string `gorm:"column:email;type:varchar(255);uniqueIndex:uk_system_user_email,priority:1"`
 	// Phone 是用户手机号。
 	Phone *string `gorm:"column:phone;type:varchar(32);uniqueIndex:uk_system_user_phone,priority:1"`
-	// Gender 是用户性别。
-	Gender *string `gorm:"column:gender;type:varchar(32)"`
+	// Gender 是用户性别，0 表示未知，1 表示男，2 表示女。
+	Gender *int `gorm:"column:gender;type:int(8);default:0"`
 	// DeptID 是用户所属部门 ID。
 	DeptID *int64 `gorm:"column:dept_id;index"`
 	// Status 是用户状态，1 表示启用，0 表示禁用。
@@ -39,6 +39,6 @@ type SysUser struct {
 }
 
 // TableName 返回系统用户表名。
-func (SysUser) TableName() string {
-	return "sys_user"
+func (User) TableName() string {
+	return tableName("sys_user")
 }

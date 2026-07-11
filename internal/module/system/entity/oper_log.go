@@ -2,8 +2,8 @@ package entity
 
 import "time"
 
-// SysOperLog 表示系统操作日志表。
-type SysOperLog struct {
+// OperLog 表示系统操作日志表。
+type OperLog struct {
 	// ID 是操作日志主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// TraceID 是请求链路 ID。
@@ -39,6 +39,6 @@ type SysOperLog struct {
 }
 
 // TableName 返回系统操作日志表名。
-func (SysOperLog) TableName() string {
-	return "sys_oper_log"
+func (OperLog) TableName() string {
+	return tableName("sys_oper_log")
 }

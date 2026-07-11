@@ -243,4 +243,6 @@ var (
 	ErrAuthDeviceIDRequired = errors.NewWithStatus(1117, http.StatusOK, "登录设备不能为空")
 	// ErrAuthLoginConflict 表示登录命中并发策略冲突。
 	ErrAuthLoginConflict = errors.NewWithStatus(1118, http.StatusOK, "当前账号已在其他设备登录")
+	// ErrUserGenderInvalid 表示用户性别非法。
+	ErrUserGenderInvalid = errors.NewWithStatus(1119, http.StatusOK, "用户性别非法")
 )

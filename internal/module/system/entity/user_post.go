@@ -2,8 +2,8 @@ package entity
 
 import "time"
 
-// SysUserPost 表示系统用户岗位关联表。
-type SysUserPost struct {
+// UserPost 表示系统用户岗位关联表。
+type UserPost struct {
 	// ID 是用户岗位关联主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// UserID 是用户 ID。
@@ -15,6 +15,6 @@ type SysUserPost struct {
 }
 
 // TableName 返回系统用户岗位关联表名。
-func (SysUserPost) TableName() string {
-	return "sys_user_post"
+func (UserPost) TableName() string {
+	return tableName("sys_user_post")
 }

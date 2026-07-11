@@ -78,7 +78,7 @@ func (s *MenuService) Create(ctx context.Context, in *dto.MenuCreateReq) error {
 		// 非根菜单必须挂载到已存在的父菜单下。
 		if fields.parentID > 0 {
 			var parentCount int64
-			if err := tx.Model(&entity.SysMenu{}).
+			if err := tx.Model(&entity.Menu{}).
 				Where("id = ?", fields.parentID).
 				Count(&parentCount).Error; err != nil {
 				logger.Error("创建菜单失败：查询父菜单失败", zap.Int64("parent_id", fields.parentID), zap.Error(err))
@@ -92,7 +92,7 @@ func (s *MenuService) Create(ctx context.Context, in *dto.MenuCreateReq) error {
 
 		// path 和 name 是前端路由与缓存识别的重要字段，创建时不允许重复。
 		var pathCount int64
-		if err := tx.Model(&entity.SysMenu{}).
+		if err := tx.Model(&entity.Menu{}).
 			Where("path = ?", fields.path).
 			Count(&pathCount).Error; err != nil {
 			logger.Error("创建菜单失败：查询菜单路径失败", zap.String("path", fields.path), zap.Error(err))
@@ -104,7 +104,7 @@ func (s *MenuService) Create(ctx context.Context, in *dto.MenuCreateReq) error {
 		}
 
 		var nameCount int64
-		if err := tx.Model(&entity.SysMenu{}).
+		if err := tx.Model(&entity.Menu{}).
 			Where("name = ?", fields.name).
 			Count(&nameCount).Error; err != nil {
 			logger.Error("创建菜单失败：查询菜单名称失败", zap.String("name", fields.name), zap.Error(err))
@@ -116,7 +116,7 @@ func (s *MenuService) Create(ctx context.Context, in *dto.MenuCreateReq) error {
 		}
 
 		// 仅写入经过校验和规范化后的字段，其他可选配置保持调用方传入值。
-		menu := &entity.SysMenu{
+		menu := &entity.Menu{
 			ParentID:    fields.parentID,
 			Path:        fields.path,
 			Name:        fields.name,
@@ -163,7 +163,7 @@ func (s *MenuService) Delete(ctx context.Context, in *dto.MenuDeleteReq) error {
 
 	// 删除必须在同一个事务内完成依赖检查和软删除，避免并发下绕过子菜单或角色绑定保护。
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var menu entity.SysMenu
+		var menu entity.Menu
 		if err := tx.Where("id = ?", in.ID).First(&menu).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				logger.Warn("删除菜单失败：菜单不存在", zap.Int64("menu_id", in.ID))
@@ -175,7 +175,7 @@ func (s *MenuService) Delete(ctx context.Context, in *dto.MenuDeleteReq) error {
 
 		// 菜单树必须先删除叶子节点，避免留下不可达的子菜单。
 		var childrenCount int64
-		if err := tx.Model(&entity.SysMenu{}).
+		if err := tx.Model(&entity.Menu{}).
 			Where("parent_id = ?", in.ID).
 			Count(&childrenCount).Error; err != nil {
 			logger.Error("删除菜单失败：查询子菜单失败", zap.Int64("menu_id", in.ID), zap.Error(err))
@@ -188,7 +188,7 @@ func (s *MenuService) Delete(ctx context.Context, in *dto.MenuDeleteReq) error {
 
 		// 已分配给角色的菜单不能直接删除，避免角色权限出现悬挂引用。
 		var roleBindingCount int64
-		if err := tx.Model(&entity.SysRoleMenu{}).
+		if err := tx.Model(&entity.RoleMenu{}).
 			Where("menu_id = ?", in.ID).
 			Count(&roleBindingCount).Error; err != nil {
 			logger.Error("删除菜单失败：查询角色绑定失败", zap.Int64("menu_id", in.ID), zap.Error(err))
@@ -241,7 +241,7 @@ func (s *MenuService) Update(ctx context.Context, in *dto.MenuUpdateReq) error {
 
 	// 更新菜单涉及树结构和唯一键检查，放在事务里保证校验和写入视图一致。
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var menu entity.SysMenu
+		var menu entity.Menu
 		if err := tx.Where("id = ?", in.ID).First(&menu).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				logger.Warn("更新菜单失败：菜单不存在", zap.Int64("menu_id", in.ID))
@@ -259,7 +259,7 @@ func (s *MenuService) Update(ctx context.Context, in *dto.MenuUpdateReq) error {
 		}
 
 		var pathCount int64
-		if err := tx.Model(&entity.SysMenu{}).
+		if err := tx.Model(&entity.Menu{}).
 			Where("path = ? AND id <> ?", fields.path, in.ID).
 			Count(&pathCount).Error; err != nil {
 			logger.Error("更新菜单失败：查询菜单路径失败", zap.Int64("menu_id", in.ID), zap.String("path", fields.path), zap.Error(err))
@@ -271,7 +271,7 @@ func (s *MenuService) Update(ctx context.Context, in *dto.MenuUpdateReq) error {
 		}
 
 		var nameCount int64
-		if err := tx.Model(&entity.SysMenu{}).
+		if err := tx.Model(&entity.Menu{}).
 			Where("name = ? AND id <> ?", fields.name, in.ID).
 			Count(&nameCount).Error; err != nil {
 			logger.Error("更新菜单失败：查询菜单名称失败", zap.Int64("menu_id", in.ID), zap.String("name", fields.name), zap.Error(err))
@@ -433,7 +433,7 @@ func (s *MenuService) ensureMenuParentForUpdate(tx *gorm.DB, menuID int64, paren
 
 	// 一次性读取菜单父子关系，避免逐级查询时遇到中间节点被修改导致判断不一致。
 	var menus []menuParent
-	if err := tx.Model(&entity.SysMenu{}).Select("id", "parent_id").Find(&menus).Error; err != nil {
+	if err := tx.Model(&entity.Menu{}).Select("id", "parent_id").Find(&menus).Error; err != nil {
 		return errcode.ErrMenuParentQueryFailed.WithErr(err)
 	}
 
@@ -461,7 +461,7 @@ func (s *MenuService) ensureMenuParentForUpdate(tx *gorm.DB, menuID int64, paren
 // Tree 查询菜单树。
 func (s *MenuService) Tree(ctx context.Context, in *dto.MenuTreeReq) ([]*dto.MenuTreeResp, error) {
 	logger := s.logger
-	var menus []entity.SysMenu
+	var menus []entity.Menu
 	// GORM 会自动过滤软删除记录；这里先按父级和排序取数，再在内存中组装树。
 	if err := s.db.WithContext(ctx).
 		Order("parent_id ASC").
@@ -478,7 +478,7 @@ func (s *MenuService) Tree(ctx context.Context, in *dto.MenuTreeReq) ([]*dto.Men
 }
 
 // buildMenuTree 将菜单列表组装为树；父节点缺失时将节点提升为根节点返回。
-func buildMenuTree(menus []entity.SysMenu) []*dto.MenuTreeResp {
+func buildMenuTree(menus []entity.Menu) []*dto.MenuTreeResp {
 	if len(menus) == 0 {
 		return []*dto.MenuTreeResp{}
 	}
@@ -506,7 +506,7 @@ func buildMenuTree(menus []entity.SysMenu) []*dto.MenuTreeResp {
 }
 
 // menuToTreeResp 将菜单实体转换为菜单树响应节点。
-func menuToTreeResp(menu *entity.SysMenu) *dto.MenuTreeResp {
+func menuToTreeResp(menu *entity.Menu) *dto.MenuTreeResp {
 	return &dto.MenuTreeResp{
 		ID:          menu.ID,
 		ParentID:    menu.ParentID,
@@ -572,7 +572,7 @@ func (s *MenuService) Detail(ctx context.Context, in *dto.MenuDetailReq) (*dto.M
 	}
 
 	// GORM 会自动过滤软删除记录，已删除菜单按不存在处理。
-	var menu entity.SysMenu
+	var menu entity.Menu
 	if err := s.db.WithContext(ctx).Where("id = ?", in.ID).First(&menu).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			logger.Warn("查询菜单详情失败：菜单不存在", zap.Int64("menu_id", in.ID))
@@ -586,7 +586,7 @@ func (s *MenuService) Detail(ctx context.Context, in *dto.MenuDetailReq) (*dto.M
 }
 
 // menuToDetailResp 将菜单实体转换为详情响应。
-func menuToDetailResp(menu *entity.SysMenu) *dto.MenuDetailResp {
+func menuToDetailResp(menu *entity.Menu) *dto.MenuDetailResp {
 	return &dto.MenuDetailResp{
 		ID:          menu.ID,
 		ParentID:    menu.ParentID,

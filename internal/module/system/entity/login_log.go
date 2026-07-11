@@ -2,8 +2,8 @@ package entity
 
 import "time"
 
-// SysLoginLog 表示系统登录日志表。
-type SysLoginLog struct {
+// LoginLog 表示系统登录日志表。
+type LoginLog struct {
 	// ID 是登录日志主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// UserID 是登录用户 ID，登录失败或用户不存在时为空。
@@ -29,6 +29,6 @@ type SysLoginLog struct {
 }
 
 // TableName 返回系统登录日志表名。
-func (SysLoginLog) TableName() string {
-	return "sys_login_log"
+func (LoginLog) TableName() string {
+	return tableName("sys_login_log")
 }

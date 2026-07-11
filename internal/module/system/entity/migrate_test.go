@@ -40,6 +40,42 @@ func TestMigrateCreatesSystemTables(t *testing.T) {
 	}
 }
 
+func TestMigrateCreatesPrefixedSystemTables(t *testing.T) {
+	t.Cleanup(func() {
+		setTablePrefix("")
+	})
+
+	db, err := gorm.Open(sqlite.Open("file:system-entity-migrate-prefix?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+
+	if err := Migrate(db, "fox"); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	for _, table := range []string{
+		"fox_sys_user",
+		"fox_sys_dept",
+		"fox_sys_post",
+		"fox_sys_role",
+		"fox_sys_menu",
+		"fox_sys_config",
+		"fox_sys_dict_type",
+		"fox_sys_dict_data",
+		"fox_sys_user_role",
+		"fox_sys_user_post",
+		"fox_sys_role_menu",
+		"fox_sys_role_dept",
+		"fox_sys_login_log",
+		"fox_sys_oper_log",
+	} {
+		if !db.Migrator().HasTable(table) {
+			t.Fatalf("table %s was not migrated", table)
+		}
+	}
+}
+
 func TestMigrateRejectsNilDB(t *testing.T) {
 	err := Migrate(nil)
 	if err == nil {

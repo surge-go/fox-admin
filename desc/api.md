@@ -345,7 +345,7 @@ Query 参数：
 | `avatar` | string/null | 否 | 头像地址 |
 | `email` | string/null | 否 | 邮箱 |
 | `phone` | string/null | 否 | 手机号 |
-| `gender` | string/null | 否 | 性别 |
+| `gender` | int/null | 否 | 性别，`0` 未知，`1` 男，`2` 女 |
 | `dept_id` | int64/null | 否 | 所属部门 ID |
 | `role_ids` | int64[] | 否 | 绑定角色 ID 集合 |
 | `post_ids` | int64[] | 否 | 绑定岗位 ID 集合 |
@@ -419,7 +419,7 @@ Query 参数：
 | `avatar` | string/null | 头像地址 |
 | `email` | string/null | 邮箱 |
 | `phone` | string/null | 手机号 |
-| `gender` | string/null | 性别 |
+| `gender` | int/null | 性别，`0` 未知，`1` 男，`2` 女 |
 | `dept_id` | int64/null | 所属部门 ID |
 | `status` | int/null | 状态 |
 | `remark` | string/null | 备注 |
@@ -449,7 +449,7 @@ Query 参数：
 | `avatar` | string/null | 头像地址 |
 | `email` | string/null | 邮箱 |
 | `phone` | string/null | 手机号 |
-| `gender` | string/null | 性别 |
+| `gender` | int/null | 性别，`0` 未知，`1` 男，`2` 女 |
 | `dept_id` | int64/null | 所属部门 ID |
 | `role_ids` | int64[] | 绑定角色 ID 集合 |
 | `post_ids` | int64[] | 绑定岗位 ID 集合 |

@@ -6,8 +6,8 @@ import (
 	"gorm.io/plugin/soft_delete"
 )
 
-// SysRole 表示系统角色表。
-type SysRole struct {
+// Role 表示系统角色表。
+type Role struct {
 	// ID 是角色主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// Name 是角色名称。
@@ -31,6 +31,6 @@ type SysRole struct {
 }
 
 // TableName 返回系统角色表名。
-func (SysRole) TableName() string {
-	return "sys_role"
+func (Role) TableName() string {
+	return tableName("sys_role")
 }

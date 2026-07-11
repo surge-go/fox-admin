@@ -32,7 +32,7 @@ func TestMenuHandlerCreateBindsRequest(t *testing.T) {
 		t.Fatalf("body = %s, want success response", body)
 	}
 
-	var menu entity.SysMenu
+	var menu entity.Menu
 	if err := db.Where("path = ?", "/system").First(&menu).Error; err != nil {
 		t.Fatalf("query created menu: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestMenuHandlerUpdateBindsRequest(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
 	}
 
-	var got entity.SysMenu
+	var got entity.Menu
 	if err := db.First(&got, menu.ID).Error; err != nil {
 		t.Fatalf("query updated menu: %v", err)
 	}
@@ -157,25 +157,25 @@ func newTestDB(t *testing.T) (string, *gorm.DB) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&entity.SysUser{},
-		&entity.SysPost{},
-		&entity.SysRole{},
-		&entity.SysDept{},
-		&entity.SysMenu{},
-		&entity.SysUserRole{},
-		&entity.SysUserPost{},
-		&entity.SysRoleMenu{},
-		&entity.SysRoleDept{},
+		&entity.User{},
+		&entity.Post{},
+		&entity.Role{},
+		&entity.Dept{},
+		&entity.Menu{},
+		&entity.UserRole{},
+		&entity.UserPost{},
+		&entity.RoleMenu{},
+		&entity.RoleDept{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return dsn, db
 }
 
-func createTestMenu(t *testing.T, db *gorm.DB, name string, path string, parentID int64) *entity.SysMenu {
+func createTestMenu(t *testing.T, db *gorm.DB, name string, path string, parentID int64) *entity.Menu {
 	t.Helper()
 
-	menu := &entity.SysMenu{
+	menu := &entity.Menu{
 		ParentID: parentID,
 		Path:     path,
 		Name:     name,

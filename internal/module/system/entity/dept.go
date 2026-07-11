@@ -6,8 +6,8 @@ import (
 	"gorm.io/plugin/soft_delete"
 )
 
-// SysDept 表示系统部门表。
-type SysDept struct {
+// Dept 表示系统部门表。
+type Dept struct {
 	// ID 是部门主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// ParentID 是父部门 ID，根部门为 0。
@@ -39,6 +39,6 @@ type SysDept struct {
 }
 
 // TableName 返回系统部门表名。
-func (SysDept) TableName() string {
-	return "sys_dept"
+func (Dept) TableName() string {
+	return tableName("sys_dept")
 }

@@ -6,8 +6,8 @@ import (
 	"gorm.io/plugin/soft_delete"
 )
 
-// SysConfig 表示系统配置表。
-type SysConfig struct {
+// Config 表示系统配置表。
+type Config struct {
 	// ID 是配置主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// Name 是配置名称。
@@ -35,6 +35,6 @@ type SysConfig struct {
 }
 
 // TableName 返回系统配置表名。
-func (SysConfig) TableName() string {
-	return "sys_config"
+func (Config) TableName() string {
+	return tableName("sys_config")
 }

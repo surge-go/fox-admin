@@ -6,8 +6,8 @@ import (
 	"gorm.io/plugin/soft_delete"
 )
 
-// SysDictData 表示系统字典数据表。
-type SysDictData struct {
+// DictData 表示系统字典数据表。
+type DictData struct {
 	// ID 是字典数据主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// TypeCode 是字典类型编码。
@@ -33,6 +33,6 @@ type SysDictData struct {
 }
 
 // TableName 返回系统字典数据表名。
-func (SysDictData) TableName() string {
-	return "sys_dict_data"
+func (DictData) TableName() string {
+	return tableName("sys_dict_data")
 }

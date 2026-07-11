@@ -19,7 +19,7 @@ func TestSeedCreatesDefaultSystemData(t *testing.T) {
 		t.Fatalf("Seed() error = %v", err)
 	}
 
-	var user entity.SysUser
+	var user entity.User
 	if err := db.Where("username = ?", "admin").First(&user).Error; err != nil {
 		t.Fatalf("query admin user: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestSeedCreatesDefaultSystemData(t *testing.T) {
 		t.Fatalf("admin password hash does not match default password: %v", err)
 	}
 
-	var role entity.SysRole
+	var role entity.Role
 	if err := db.Where("code = ?", "admin").First(&role).Error; err != nil {
 		t.Fatalf("query admin role: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestSeedCreatesDefaultSystemData(t *testing.T) {
 	}
 
 	var userRoleCount int64
-	if err := db.Model(&entity.SysUserRole{}).
+	if err := db.Model(&entity.UserRole{}).
 		Where("user_id = ? AND role_id = ?", user.ID, role.ID).
 		Count(&userRoleCount).Error; err != nil {
 		t.Fatalf("query user role binding: %v", err)
@@ -58,7 +58,7 @@ func TestSeedCreatesDefaultSystemData(t *testing.T) {
 		"/system/user/detail/:id",
 	}
 	var gotMenuPaths []string
-	if err := db.Model(&entity.SysMenu{}).Order("path ASC").Pluck("path", &gotMenuPaths).Error; err != nil {
+	if err := db.Model(&entity.Menu{}).Order("path ASC").Pluck("path", &gotMenuPaths).Error; err != nil {
 		t.Fatalf("query menu paths: %v", err)
 	}
 	sort.Strings(wantMenuPaths)
@@ -67,12 +67,12 @@ func TestSeedCreatesDefaultSystemData(t *testing.T) {
 	}
 
 	for _, path := range []string{"/dashboard", "/system", "/system/user", "/system/role", "/status/system"} {
-		var menu entity.SysMenu
+		var menu entity.Menu
 		if err := db.Where("path = ?", path).First(&menu).Error; err != nil {
 			t.Fatalf("query menu %s: %v", path, err)
 		}
 		var roleMenuCount int64
-		if err := db.Model(&entity.SysRoleMenu{}).
+		if err := db.Model(&entity.RoleMenu{}).
 			Where("role_id = ? AND menu_id = ?", role.ID, menu.ID).
 			Count(&roleMenuCount).Error; err != nil {
 			t.Fatalf("query role menu binding %s: %v", path, err)
@@ -93,16 +93,16 @@ func TestSeedIsIdempotent(t *testing.T) {
 	}
 
 	var userCount, roleCount, menuCount, userRoleCount int64
-	if err := db.Model(&entity.SysUser{}).Where("username = ?", "admin").Count(&userCount).Error; err != nil {
+	if err := db.Model(&entity.User{}).Where("username = ?", "admin").Count(&userCount).Error; err != nil {
 		t.Fatalf("count users: %v", err)
 	}
-	if err := db.Model(&entity.SysRole{}).Where("code = ?", "admin").Count(&roleCount).Error; err != nil {
+	if err := db.Model(&entity.Role{}).Where("code = ?", "admin").Count(&roleCount).Error; err != nil {
 		t.Fatalf("count roles: %v", err)
 	}
-	if err := db.Model(&entity.SysMenu{}).Where("path = ?", "/system/user").Count(&menuCount).Error; err != nil {
+	if err := db.Model(&entity.Menu{}).Where("path = ?", "/system/user").Count(&menuCount).Error; err != nil {
 		t.Fatalf("count menus: %v", err)
 	}
-	if err := db.Model(&entity.SysUserRole{}).Count(&userRoleCount).Error; err != nil {
+	if err := db.Model(&entity.UserRole{}).Count(&userRoleCount).Error; err != nil {
 		t.Fatalf("count user roles: %v", err)
 	}
 	if userCount != 1 || roleCount != 1 || menuCount != 1 || userRoleCount != 1 {

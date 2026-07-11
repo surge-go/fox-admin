@@ -30,7 +30,7 @@ func TestRoleHandlerCreateBindsRequest(t *testing.T) {
 		t.Fatalf("body = %s, want success response", body)
 	}
 
-	var role entity.SysRole
+	var role entity.Role
 	if err := db.Where("code = ?", "admin").First(&role).Error; err != nil {
 		t.Fatalf("query created role: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestRoleHandlerUpdateBindsRequest(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
 	}
 
-	var got entity.SysRole
+	var got entity.Role
 	if err := db.First(&got, role.ID).Error; err != nil {
 		t.Fatalf("query updated role: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestRoleHandlerAssignMenusBindsRequest(t *testing.T) {
 	}
 
 	var count int64
-	if err := db.Model(&entity.SysRoleMenu{}).Where("role_id = ? AND menu_id = ?", role.ID, menu.ID).Count(&count).Error; err != nil {
+	if err := db.Model(&entity.RoleMenu{}).Where("role_id = ? AND menu_id = ?", role.ID, menu.ID).Count(&count).Error; err != nil {
 		t.Fatalf("count role menu: %v", err)
 	}
 	if count != 1 {
@@ -145,7 +145,7 @@ func TestRoleHandlerUpdateStatusBindsRequest(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
 	}
 
-	var got entity.SysRole
+	var got entity.Role
 	if err := db.First(&got, role.ID).Error; err != nil {
 		t.Fatalf("query role: %v", err)
 	}
@@ -189,10 +189,10 @@ func newTestRoleEngine(t *testing.T) (*fox.Engine, *gorm.DB) {
 	return engine, db
 }
 
-func createTestRole(t *testing.T, db *gorm.DB, name string, code string) *entity.SysRole {
+func createTestRole(t *testing.T, db *gorm.DB, name string, code string) *entity.Role {
 	t.Helper()
 
-	role := &entity.SysRole{
+	role := &entity.Role{
 		Name:      name,
 		Code:      code,
 		DataScope: ptr.Of("all"),

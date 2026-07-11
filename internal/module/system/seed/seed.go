@@ -60,8 +60,8 @@ func Seed(db *gorm.DB) error {
 	})
 }
 
-func seedMenus(tx *gorm.DB, parentID int64, menus []menuSeed) ([]entity.SysMenu, error) {
-	seeded := make([]entity.SysMenu, 0, len(menus))
+func seedMenus(tx *gorm.DB, parentID int64, menus []menuSeed) ([]entity.Menu, error) {
+	seeded := make([]entity.Menu, 0, len(menus))
 	for _, item := range menus {
 		menu, err := firstOrCreateMenu(tx, parentID, item)
 		if err != nil {
@@ -78,17 +78,17 @@ func seedMenus(tx *gorm.DB, parentID int64, menus []menuSeed) ([]entity.SysMenu,
 	return seeded, nil
 }
 
-func firstOrCreateMenu(tx *gorm.DB, parentID int64, item menuSeed) (entity.SysMenu, error) {
-	var existing entity.SysMenu
+func firstOrCreateMenu(tx *gorm.DB, parentID int64, item menuSeed) (entity.Menu, error) {
+	var existing entity.Menu
 	err := tx.Where("path = ?", item.Path).First(&existing).Error
 	if err == nil {
 		return existing, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return entity.SysMenu{}, err
+		return entity.Menu{}, err
 	}
 
-	menu := entity.SysMenu{
+	menu := entity.Menu{
 		ParentID:    parentID,
 		Path:        item.Path,
 		Name:        item.Name,
@@ -112,17 +112,17 @@ func firstOrCreateMenu(tx *gorm.DB, parentID int64, item menuSeed) (entity.SysMe
 	return menu, tx.Create(&menu).Error
 }
 
-func seedAdminRole(tx *gorm.DB) (entity.SysRole, error) {
-	var existing entity.SysRole
+func seedAdminRole(tx *gorm.DB) (entity.Role, error) {
+	var existing entity.Role
 	err := tx.Where("code = ?", "admin").First(&existing).Error
 	if err == nil {
 		return existing, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return entity.SysRole{}, err
+		return entity.Role{}, err
 	}
 
-	role := entity.SysRole{
+	role := entity.Role{
 		Name:      "超级管理员",
 		Code:      "admin",
 		DataScope: ptr.Of("all"),
@@ -133,21 +133,21 @@ func seedAdminRole(tx *gorm.DB) (entity.SysRole, error) {
 	return role, tx.Create(&role).Error
 }
 
-func seedAdminUser(tx *gorm.DB) (entity.SysUser, error) {
-	var existing entity.SysUser
+func seedAdminUser(tx *gorm.DB) (entity.User, error) {
+	var existing entity.User
 	err := tx.Where("username = ?", "admin").First(&existing).Error
 	if err == nil {
 		return existing, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return entity.SysUser{}, err
+		return entity.User{}, err
 	}
 
 	password, err := hashPassword(defaultAdminPassword)
 	if err != nil {
-		return entity.SysUser{}, err
+		return entity.User{}, err
 	}
-	user := entity.SysUser{
+	user := entity.User{
 		Username: "admin",
 		Password: password,
 		Nickname: ptr.Of("管理员"),
@@ -157,10 +157,10 @@ func seedAdminUser(tx *gorm.DB) (entity.SysUser, error) {
 	return user, tx.Create(&user).Error
 }
 
-func seedRoleMenus(tx *gorm.DB, roleID int64, menus []entity.SysMenu) error {
+func seedRoleMenus(tx *gorm.DB, roleID int64, menus []entity.Menu) error {
 	for _, menu := range menus {
 		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).
-			Create(&entity.SysRoleMenu{RoleID: roleID, MenuID: menu.ID}).Error; err != nil {
+			Create(&entity.RoleMenu{RoleID: roleID, MenuID: menu.ID}).Error; err != nil {
 			return err
 		}
 	}
@@ -169,7 +169,7 @@ func seedRoleMenus(tx *gorm.DB, roleID int64, menus []entity.SysMenu) error {
 
 func seedUserRole(tx *gorm.DB, userID int64, roleID int64) error {
 	return tx.Clauses(clause.OnConflict{DoNothing: true}).
-		Create(&entity.SysUserRole{UserID: userID, RoleID: roleID}).Error
+		Create(&entity.UserRole{UserID: userID, RoleID: roleID}).Error
 }
 
 func systemMenus() []menuSeed {

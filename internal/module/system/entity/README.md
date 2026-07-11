@@ -6,7 +6,7 @@
 
 ## 设计约定
 
-- 结构体统一使用 `Sys` 前缀，例如 `SysUser`、`SysRoleMenu`。
+- 结构体直接按领域命名，不再使用 `Sys` 前缀，例如 `User`、`RoleMenu`。
 - 主键统一使用 `int64`。
 - 数据库列名使用 snake_case。
 - 可选字段使用指针类型。
@@ -20,40 +20,40 @@
 
 | 实体 | 表名 | 文件 | 说明 |
 | --- | --- | --- | --- |
-| `SysUser` | `sys_user` | `user.go` | 系统用户 |
-| `SysDept` | `sys_dept` | `dept.go` | 系统部门 |
-| `SysPost` | `sys_post` | `post.go` | 系统岗位 |
-| `SysRole` | `sys_role` | `role.go` | 系统角色 |
-| `SysMenu` | `sys_menu` | `menu.go` | 系统菜单、按钮和权限标识 |
-| `SysConfig` | `sys_config` | `config.go` | 系统配置 |
-| `SysDictType` | `sys_dict_type` | `dict_type.go` | 字典类型 |
-| `SysDictData` | `sys_dict_data` | `dict_data.go` | 字典数据 |
+| `User` | `sys_user` | `user.go` | 系统用户 |
+| `Dept` | `sys_dept` | `dept.go` | 系统部门 |
+| `Post` | `sys_post` | `post.go` | 系统岗位 |
+| `Role` | `sys_role` | `role.go` | 系统角色 |
+| `Menu` | `sys_menu` | `menu.go` | 系统菜单、按钮和权限标识 |
+| `Config` | `sys_config` | `config.go` | 系统配置 |
+| `DictType` | `sys_dict_type` | `dict_type.go` | 字典类型 |
+| `DictData` | `sys_dict_data` | `dict_data.go` | 字典数据 |
 
 ## 关联表
 
 | 实体 | 表名 | 文件 | 说明 |
 | --- | --- | --- | --- |
-| `SysUserRole` | `sys_user_role` | `user_role.go` | 用户和角色关联 |
-| `SysUserPost` | `sys_user_post` | `user_post.go` | 用户和岗位关联 |
-| `SysRoleMenu` | `sys_role_menu` | `role_menu.go` | 角色和菜单关联 |
-| `SysRoleDept` | `sys_role_dept` | `role_dept.go` | 角色自定义数据权限部门范围 |
+| `UserRole` | `sys_user_role` | `user_role.go` | 用户和角色关联 |
+| `UserPost` | `sys_user_post` | `user_post.go` | 用户和岗位关联 |
+| `RoleMenu` | `sys_role_menu` | `role_menu.go` | 角色和菜单关联 |
+| `RoleDept` | `sys_role_dept` | `role_dept.go` | 角色自定义数据权限部门范围 |
 
 ## 日志表
 
 | 实体 | 表名 | 文件 | 说明 |
 | --- | --- | --- | --- |
-| `SysLoginLog` | `sys_login_log` | `login_log.go` | 登录日志 |
-| `SysOperLog` | `sys_oper_log` | `oper_log.go` | 操作日志 |
+| `LoginLog` | `sys_login_log` | `login_log.go` | 登录日志 |
+| `OperLog` | `sys_oper_log` | `oper_log.go` | 操作日志 |
 
 ## 权限关系
 
 当前权限模型以菜单和权限标识为核心：
 
 ```text
-SysUser -> SysUserRole -> SysRole -> SysRoleMenu -> SysMenu
+User -> UserRole -> Role -> RoleMenu -> Menu
 ```
 
-`SysMenu.Permissions` 保存菜单或按钮权限标识，例如：
+`Menu.Permissions` 保存菜单或按钮权限标识，例如：
 
 ```text
 system:user:list
@@ -66,7 +66,7 @@ system:user:delete
 
 ## 数据权限
 
-`SysRole.DataScope` 表示角色数据权限范围，推荐由字典维护：
+`Role.DataScope` 表示角色数据权限范围，推荐由字典维护：
 
 ```text
 all
@@ -156,6 +156,27 @@ path + deleted_at
 
 ## 表前缀
 
-当前实体通过 `TableName()` 固定返回 `sys_*` 表名。
+系统实体支持统一表前缀。表前缀由 `entity.Migrate(db, prefix...)` 设置，实体的 `TableName()` 不直接返回固定字符串，而是统一调用 `tableName`：
 
-如果后续要支持自定义表前缀，需要统一调整表名策略，例如删除 `TableName()` 并使用 GORM 的 `NamingStrategy.TablePrefix`。
+```go
+func (Role) TableName() string {
+	return tableName("sys_role")
+}
+```
+
+调用示例：
+
+```go
+entity.Migrate(db)        // 创建 sys_* 表
+entity.Migrate(db, "fox") // 创建 fox_sys_* 表
+```
+
+传入的前缀会自动 trim，并在非空且没有下划线结尾时补 `_`，因此 `"fox"` 和 `"fox_"` 都会生成 `fox_sys_user`。
+
+### 使用约束
+
+- 新增实体时，`TableName()` 必须调用 `tableName("sys_xxx")`，不要直接返回 `"sys_xxx"`。
+- 表名前缀只在 entity 层统一处理，业务 service 不应再手动拼接 `prefix + entity.TableName()`，否则可能出现双前缀。
+- 普通实体查询优先使用 `Model(&entity.Xxx{})`，让 GORM 通过实体 `TableName()` 解析表名。
+- 需要别名、join、关联表批量写入或删除时，可以使用 `Table(entity.Xxx{}.TableName())`。
+- `tableName` 使用包级前缀状态，迁移前应先通过 `entity.Migrate(db, prefix...)` 完成前缀设置；同一进程内不建议同时连接多个不同系统表前缀的数据源。

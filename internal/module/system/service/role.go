@@ -77,7 +77,7 @@ func (s *RoleService) Create(ctx context.Context, in *dto.RoleCreateReq) error {
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var nameCount int64
-		if err := tx.Model(&entity.SysRole{}).
+		if err := tx.Model(&entity.Role{}).
 			Where("name = ?", fields.name).
 			Count(&nameCount).Error; err != nil {
 			logger.Error("创建角色失败：查询角色名称失败", zap.String("name", fields.name), zap.Error(err))
@@ -89,7 +89,7 @@ func (s *RoleService) Create(ctx context.Context, in *dto.RoleCreateReq) error {
 		}
 
 		var codeCount int64
-		if err := tx.Model(&entity.SysRole{}).
+		if err := tx.Model(&entity.Role{}).
 			Where("code = ?", fields.code).
 			Count(&codeCount).Error; err != nil {
 			logger.Error("创建角色失败：查询角色编码失败", zap.String("code", fields.code), zap.Error(err))
@@ -105,7 +105,7 @@ func (s *RoleService) Create(ctx context.Context, in *dto.RoleCreateReq) error {
 			return err
 		}
 
-		role := &entity.SysRole{
+		role := &entity.Role{
 			Name:      fields.name,
 			Code:      fields.code,
 			DataScope: fields.dataScope,
@@ -139,7 +139,7 @@ func (s *RoleService) Delete(ctx context.Context, in *dto.RoleDeleteReq) error {
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var role entity.SysRole
+		var role entity.Role
 		if err := tx.Where("id = ?", in.ID).First(&role).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				logger.Warn("删除角色失败：角色不存在", zap.Int64("role_id", in.ID))
@@ -150,7 +150,7 @@ func (s *RoleService) Delete(ctx context.Context, in *dto.RoleDeleteReq) error {
 		}
 
 		var userBindingCount int64
-		if err := tx.Model(&entity.SysUserRole{}).
+		if err := tx.Model(&entity.UserRole{}).
 			Where("role_id = ?", in.ID).
 			Count(&userBindingCount).Error; err != nil {
 			logger.Error("删除角色失败：查询用户绑定失败", zap.Int64("role_id", in.ID), zap.Error(err))
@@ -161,11 +161,11 @@ func (s *RoleService) Delete(ctx context.Context, in *dto.RoleDeleteReq) error {
 			return errcode.ErrRoleHasUserBinding
 		}
 
-		if err := tx.Where("role_id = ?", in.ID).Delete(&entity.SysRoleMenu{}).Error; err != nil {
+		if err := tx.Where("role_id = ?", in.ID).Delete(&entity.RoleMenu{}).Error; err != nil {
 			logger.Error("删除角色失败：删除角色菜单失败", zap.Int64("role_id", in.ID), zap.Error(err))
 			return errcode.ErrRoleDeleteFailed.WithErr(err)
 		}
-		if err := tx.Where("role_id = ?", in.ID).Delete(&entity.SysRoleDept{}).Error; err != nil {
+		if err := tx.Where("role_id = ?", in.ID).Delete(&entity.RoleDept{}).Error; err != nil {
 			logger.Error("删除角色失败：删除角色部门失败", zap.Int64("role_id", in.ID), zap.Error(err))
 			return errcode.ErrRoleDeleteFailed.WithErr(err)
 		}
@@ -204,7 +204,7 @@ func (s *RoleService) Update(ctx context.Context, in *dto.RoleUpdateReq) error {
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var role entity.SysRole
+		var role entity.Role
 		if err := tx.Where("id = ?", in.ID).First(&role).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				logger.Warn("更新角色失败：角色不存在", zap.Int64("role_id", in.ID))
@@ -215,7 +215,7 @@ func (s *RoleService) Update(ctx context.Context, in *dto.RoleUpdateReq) error {
 		}
 
 		var nameCount int64
-		if err := tx.Model(&entity.SysRole{}).
+		if err := tx.Model(&entity.Role{}).
 			Where("name = ? AND id <> ?", fields.name, in.ID).
 			Count(&nameCount).Error; err != nil {
 			logger.Error("更新角色失败：查询角色名称失败", zap.Int64("role_id", in.ID), zap.String("name", fields.name), zap.Error(err))
@@ -227,7 +227,7 @@ func (s *RoleService) Update(ctx context.Context, in *dto.RoleUpdateReq) error {
 		}
 
 		var codeCount int64
-		if err := tx.Model(&entity.SysRole{}).
+		if err := tx.Model(&entity.Role{}).
 			Where("code = ? AND id <> ?", fields.code, in.ID).
 			Count(&codeCount).Error; err != nil {
 			logger.Error("更新角色失败：查询角色编码失败", zap.Int64("role_id", in.ID), zap.String("code", fields.code), zap.Error(err))
@@ -291,7 +291,7 @@ func (s *RoleService) Update(ctx context.Context, in *dto.RoleUpdateReq) error {
 // List 查询角色列表。
 func (s *RoleService) List(ctx context.Context, in *dto.RoleListReq) (*dto.RoleListResp, error) {
 	logger := s.logger
-	query := s.db.WithContext(ctx).Model(&entity.SysRole{})
+	query := s.db.WithContext(ctx).Model(&entity.Role{})
 	if in != nil {
 		name := strings.TrimSpace(in.Name)
 		if name != "" {
@@ -313,7 +313,7 @@ func (s *RoleService) List(ctx context.Context, in *dto.RoleListReq) (*dto.RoleL
 	}
 
 	page, size := normalizeRolePage(in)
-	var roles []entity.SysRole
+	var roles []entity.Role
 	if err := query.
 		Order("sort ASC").
 		Order("id ASC").
@@ -347,7 +347,7 @@ func (s *RoleService) Detail(ctx context.Context, in *dto.RoleDetailReq) (*dto.R
 		return nil, errcode.ErrRoleIDInvalid
 	}
 
-	var role entity.SysRole
+	var role entity.Role
 	if err := s.db.WithContext(ctx).Where("id = ?", in.ID).First(&role).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			logger.Warn("查询角色详情失败：角色不存在", zap.Int64("role_id", in.ID))
@@ -431,7 +431,7 @@ func (s *RoleService) UpdateStatus(ctx context.Context, in *dto.RoleUpdateStatus
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
-		if err := tx.Model(&entity.SysRole{}).Where("id IN ?", ids).Count(&count).Error; err != nil {
+		if err := tx.Model(&entity.Role{}).Where("id IN ?", ids).Count(&count).Error; err != nil {
 			logger.Error("更新角色状态失败：查询角色失败", zap.Int64s("role_ids", ids), zap.Error(err))
 			return errcode.ErrRoleQueryFailed.WithErr(err)
 		}
@@ -439,7 +439,7 @@ func (s *RoleService) UpdateStatus(ctx context.Context, in *dto.RoleUpdateStatus
 			logger.Warn("更新角色状态失败：部分角色不存在", zap.Int64s("role_ids", ids), zap.Int64("found_count", count))
 			return errcode.ErrRoleNotFound
 		}
-		if err := tx.Model(&entity.SysRole{}).
+		if err := tx.Model(&entity.Role{}).
 			Where("id IN ?", ids).
 			Update("status", status).Error; err != nil {
 			logger.Error("更新角色状态失败：数据库更新失败", zap.Int64s("role_ids", ids), zap.Int("status", status), zap.Error(err))
@@ -552,7 +552,7 @@ func (s *RoleService) ensureRoleDeptsExist(tx *gorm.DB, deptIDs []int64) error {
 		return nil
 	}
 	var count int64
-	if err := tx.Model(&entity.SysDept{}).Where("id IN ?", deptIDs).Count(&count).Error; err != nil {
+	if err := tx.Model(&entity.Dept{}).Where("id IN ?", deptIDs).Count(&count).Error; err != nil {
 		return errcode.ErrRoleDeptQueryFailed.WithErr(err)
 	}
 	if count != int64(len(deptIDs)) {
@@ -567,7 +567,7 @@ func (s *RoleService) ensureRoleMenusExist(tx *gorm.DB, menuIDs []int64) error {
 		return nil
 	}
 	var count int64
-	if err := tx.Model(&entity.SysMenu{}).Where("id IN ?", menuIDs).Count(&count).Error; err != nil {
+	if err := tx.Model(&entity.Menu{}).Where("id IN ?", menuIDs).Count(&count).Error; err != nil {
 		return errcode.ErrRoleMenuQueryFailed.WithErr(err)
 	}
 	if count != int64(len(menuIDs)) {
@@ -579,7 +579,7 @@ func (s *RoleService) ensureRoleMenusExist(tx *gorm.DB, menuIDs []int64) error {
 // ensureRoleExists 校验角色存在且未被软删除。
 func ensureRoleExists(tx *gorm.DB, roleID int64) error {
 	var count int64
-	if err := tx.Model(&entity.SysRole{}).Where("id = ?", roleID).Count(&count).Error; err != nil {
+	if err := tx.Model(&entity.Role{}).Where("id = ?", roleID).Count(&count).Error; err != nil {
 		return errcode.ErrRoleQueryFailed.WithErr(err)
 	}
 	if count == 0 {
@@ -590,30 +590,30 @@ func ensureRoleExists(tx *gorm.DB, roleID int64) error {
 
 // replaceRoleDepts 使用新的部门 ID 集合替换角色自定义数据权限部门绑定。
 func replaceRoleDepts(tx *gorm.DB, roleID int64, deptIDs []int64) error {
-	if err := tx.Where("role_id = ?", roleID).Delete(&entity.SysRoleDept{}).Error; err != nil {
+	if err := tx.Where("role_id = ?", roleID).Delete(&entity.RoleDept{}).Error; err != nil {
 		return err
 	}
 	if len(deptIDs) == 0 {
 		return nil
 	}
-	bindings := make([]entity.SysRoleDept, 0, len(deptIDs))
+	bindings := make([]entity.RoleDept, 0, len(deptIDs))
 	for _, deptID := range deptIDs {
-		bindings = append(bindings, entity.SysRoleDept{RoleID: roleID, DeptID: deptID})
+		bindings = append(bindings, entity.RoleDept{RoleID: roleID, DeptID: deptID})
 	}
 	return tx.Create(&bindings).Error
 }
 
 // replaceRoleMenus 使用新的菜单 ID 集合替换角色菜单绑定。
 func replaceRoleMenus(tx *gorm.DB, roleID int64, menuIDs []int64) error {
-	if err := tx.Where("role_id = ?", roleID).Delete(&entity.SysRoleMenu{}).Error; err != nil {
+	if err := tx.Where("role_id = ?", roleID).Delete(&entity.RoleMenu{}).Error; err != nil {
 		return err
 	}
 	if len(menuIDs) == 0 {
 		return nil
 	}
-	bindings := make([]entity.SysRoleMenu, 0, len(menuIDs))
+	bindings := make([]entity.RoleMenu, 0, len(menuIDs))
 	for _, menuID := range menuIDs {
-		bindings = append(bindings, entity.SysRoleMenu{RoleID: roleID, MenuID: menuID})
+		bindings = append(bindings, entity.RoleMenu{RoleID: roleID, MenuID: menuID})
 	}
 	return tx.Create(&bindings).Error
 }
@@ -640,7 +640,7 @@ func normalizeRolePage(in *dto.RoleListReq) (int, int) {
 func (s *RoleService) roleDeptIDs(ctx context.Context, roleID int64) ([]int64, error) {
 	var deptIDs []int64
 	if err := s.db.WithContext(ctx).
-		Model(&entity.SysRoleDept{}).
+		Model(&entity.RoleDept{}).
 		Where("role_id = ?", roleID).
 		Order("dept_id ASC").
 		Pluck("dept_id", &deptIDs).Error; err != nil {
@@ -653,7 +653,7 @@ func (s *RoleService) roleDeptIDs(ctx context.Context, roleID int64) ([]int64, e
 func (s *RoleService) roleMenuIDs(ctx context.Context, roleID int64) ([]int64, error) {
 	var menuIDs []int64
 	if err := s.db.WithContext(ctx).
-		Model(&entity.SysRoleMenu{}).
+		Model(&entity.RoleMenu{}).
 		Where("role_id = ?", roleID).
 		Order("menu_id ASC").
 		Pluck("menu_id", &menuIDs).Error; err != nil {
@@ -663,7 +663,7 @@ func (s *RoleService) roleMenuIDs(ctx context.Context, roleID int64) ([]int64, e
 }
 
 // roleToListItemResp 将角色实体转换为列表项响应。
-func roleToListItemResp(role *entity.SysRole) *dto.RoleListItemResp {
+func roleToListItemResp(role *entity.Role) *dto.RoleListItemResp {
 	return &dto.RoleListItemResp{
 		ID:        role.ID,
 		Name:      role.Name,
@@ -678,7 +678,7 @@ func roleToListItemResp(role *entity.SysRole) *dto.RoleListItemResp {
 }
 
 // roleToDetailResp 将角色实体及绑定关系转换为详情响应。
-func roleToDetailResp(role *entity.SysRole, deptIDs []int64, menuIDs []int64) *dto.RoleDetailResp {
+func roleToDetailResp(role *entity.Role, deptIDs []int64, menuIDs []int64) *dto.RoleDetailResp {
 	return &dto.RoleDetailResp{
 		ID:        role.ID,
 		Name:      role.Name,

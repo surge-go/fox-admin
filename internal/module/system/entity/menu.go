@@ -6,8 +6,8 @@ import (
 	"gorm.io/plugin/soft_delete"
 )
 
-// SysMenu 表示系统菜单表。
-type SysMenu struct {
+// Menu 表示系统菜单表。
+type Menu struct {
 	// ID 是菜单主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// ParentID 是父菜单 ID，根菜单为 0。
@@ -61,6 +61,6 @@ type SysMenu struct {
 }
 
 // TableName 返回系统菜单表名。
-func (SysMenu) TableName() string {
-	return "sys_menu"
+func (Menu) TableName() string {
+	return tableName("sys_menu")
 }

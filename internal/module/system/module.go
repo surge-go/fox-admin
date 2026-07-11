@@ -12,8 +12,8 @@ import (
 )
 
 // Migrate 迁移系统模块数据表。
-func Migrate(db *gorm.DB) error {
-	if err := entity.Migrate(db); err != nil {
+func Migrate(db *gorm.DB, tablePrefixes ...string) error {
+	if err := entity.Migrate(db, tablePrefixes...); err != nil {
 		return err
 	}
 	return seed.Seed(db)

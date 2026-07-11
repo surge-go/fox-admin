@@ -6,8 +6,8 @@ import (
 	"gorm.io/plugin/soft_delete"
 )
 
-// SysDictType 表示系统字典类型表。
-type SysDictType struct {
+// DictType 表示系统字典类型表。
+type DictType struct {
 	// ID 是字典类型主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// Name 是字典类型名称。
@@ -27,6 +27,6 @@ type SysDictType struct {
 }
 
 // TableName 返回系统字典类型表名。
-func (SysDictType) TableName() string {
-	return "sys_dict_type"
+func (DictType) TableName() string {
+	return tableName("sys_dict_type")
 }

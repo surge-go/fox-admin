@@ -35,7 +35,7 @@ type userFields struct {
 	avatar   *string
 	email    *string
 	phone    *string
-	gender   *string
+	gender   *int
 	deptID   *int64
 	roleIDs  []int64
 	postIDs  []int64
@@ -102,7 +102,7 @@ func (s *UserService) Create(ctx context.Context, in *dto.UserCreateReq) error {
 			return err
 		}
 
-		user := &entity.SysUser{
+		user := &entity.User{
 			Username: fields.username,
 			Password: passwordHash,
 			Nickname: fields.nickname,
@@ -144,7 +144,7 @@ func (s *UserService) Delete(ctx context.Context, in *dto.UserDeleteReq) error {
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var user entity.SysUser
+		var user entity.User
 		if err := tx.Where("id = ?", in.ID).First(&user).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				logger.Warn("删除用户失败：用户不存在", zap.Int64("user_id", in.ID))
@@ -153,11 +153,11 @@ func (s *UserService) Delete(ctx context.Context, in *dto.UserDeleteReq) error {
 			logger.Error("删除用户失败：查询用户失败", zap.Int64("user_id", in.ID), zap.Error(err))
 			return errcode.ErrUserQueryFailed.WithErr(err)
 		}
-		if err := tx.Where("user_id = ?", in.ID).Delete(&entity.SysUserRole{}).Error; err != nil {
+		if err := tx.Where("user_id = ?", in.ID).Delete(&entity.UserRole{}).Error; err != nil {
 			logger.Error("删除用户失败：删除用户角色失败", zap.Int64("user_id", in.ID), zap.Error(err))
 			return errcode.ErrUserDeleteFailed.WithErr(err)
 		}
-		if err := tx.Where("user_id = ?", in.ID).Delete(&entity.SysUserPost{}).Error; err != nil {
+		if err := tx.Where("user_id = ?", in.ID).Delete(&entity.UserPost{}).Error; err != nil {
 			logger.Error("删除用户失败：删除用户岗位失败", zap.Int64("user_id", in.ID), zap.Error(err))
 			return errcode.ErrUserDeleteFailed.WithErr(err)
 		}
@@ -200,7 +200,7 @@ func (s *UserService) Update(ctx context.Context, in *dto.UserUpdateReq) error {
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var user entity.SysUser
+		var user entity.User
 		if err := tx.Where("id = ?", in.ID).First(&user).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				logger.Warn("更新用户失败：用户不存在", zap.Int64("user_id", in.ID))
@@ -254,7 +254,7 @@ func (s *UserService) Update(ctx context.Context, in *dto.UserUpdateReq) error {
 // List 查询用户列表。
 func (s *UserService) List(ctx context.Context, in *dto.UserListReq) (*dto.UserListResp, error) {
 	logger := s.logger
-	query := s.db.WithContext(ctx).Model(&entity.SysUser{})
+	query := s.db.WithContext(ctx).Model(&entity.User{})
 	if in != nil {
 		username := strings.TrimSpace(in.Username)
 		if username != "" {
@@ -283,7 +283,7 @@ func (s *UserService) List(ctx context.Context, in *dto.UserListReq) (*dto.UserL
 	}
 
 	page, size := normalizeUserPage(in)
-	var users []entity.SysUser
+	var users []entity.User
 	if err := query.
 		Order("id ASC").
 		Limit(size).
@@ -316,7 +316,7 @@ func (s *UserService) Detail(ctx context.Context, in *dto.UserDetailReq) (*dto.U
 		return nil, errcode.ErrUserIDInvalid
 	}
 
-	var user entity.SysUser
+	var user entity.User
 	if err := s.db.WithContext(ctx).Where("id = ?", in.ID).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			logger.Warn("查询用户详情失败：用户不存在", zap.Int64("user_id", in.ID))
@@ -366,7 +366,7 @@ func (s *UserService) UpdateStatus(ctx context.Context, in *dto.UserUpdateStatus
 			logger.Warn("更新用户状态失败：用户校验未通过", zap.Int64s("user_ids", ids), zap.Error(err))
 			return err
 		}
-		if err := tx.Model(&entity.SysUser{}).
+		if err := tx.Model(&entity.User{}).
 			Where("id IN ?", ids).
 			Update("status", status).Error; err != nil {
 			logger.Error("更新用户状态失败：数据库更新失败", zap.Int64s("user_ids", ids), zap.Int("status", status), zap.Error(err))
@@ -404,7 +404,7 @@ func (s *UserService) ResetPassword(ctx context.Context, in *dto.UserResetPasswo
 			logger.Warn("重置用户密码失败：用户不存在", zap.Int64("user_id", in.ID), zap.Error(err))
 			return err
 		}
-		if err := tx.Model(&entity.SysUser{}).
+		if err := tx.Model(&entity.User{}).
 			Where("id = ?", in.ID).
 			Update("password", passwordHash).Error; err != nil {
 			logger.Error("重置用户密码失败：数据库更新失败", zap.Int64("user_id", in.ID), zap.Error(err))
@@ -459,6 +459,9 @@ func normalizeUserFields(in userFields) (*userFields, error) {
 	if in.deptID != nil && *in.deptID <= 0 {
 		return nil, errcode.ErrUserDeptIDInvalid
 	}
+	if in.gender != nil && (*in.gender < 0 || *in.gender > 2) {
+		return nil, errcode.ErrUserGenderInvalid
+	}
 	status := in.status
 	if status != nil && !isValidEnabledStatus(*status) {
 		return nil, errcode.ErrUserStatusRequired
@@ -478,7 +481,7 @@ func normalizeUserFields(in userFields) (*userFields, error) {
 		avatar:   trimOptionalString(in.avatar),
 		email:    trimOptionalString(in.email),
 		phone:    trimOptionalString(in.phone),
-		gender:   trimOptionalString(in.gender),
+		gender:   in.gender,
 		deptID:   in.deptID,
 		roleIDs:  roleIDs,
 		postIDs:  postIDs,
@@ -521,7 +524,7 @@ func normalizeUserIDs(ids []int64, invalidErr error) ([]int64, error) {
 // ensureUserUniqueFields 校验用户账号、邮箱和手机号未被其他用户占用。
 func (s *UserService) ensureUserUniqueFields(tx *gorm.DB, username string, email *string, phone *string, excludeID int64) error {
 	var usernameCount int64
-	usernameQuery := tx.Model(&entity.SysUser{}).Where("username = ?", username)
+	usernameQuery := tx.Model(&entity.User{}).Where("username = ?", username)
 	if excludeID > 0 {
 		usernameQuery = usernameQuery.Where("id <> ?", excludeID)
 	}
@@ -534,7 +537,7 @@ func (s *UserService) ensureUserUniqueFields(tx *gorm.DB, username string, email
 
 	if email != nil && *email != "" {
 		var emailCount int64
-		emailQuery := tx.Model(&entity.SysUser{}).Where("email = ?", *email)
+		emailQuery := tx.Model(&entity.User{}).Where("email = ?", *email)
 		if excludeID > 0 {
 			emailQuery = emailQuery.Where("id <> ?", excludeID)
 		}
@@ -548,7 +551,7 @@ func (s *UserService) ensureUserUniqueFields(tx *gorm.DB, username string, email
 
 	if phone != nil && *phone != "" {
 		var phoneCount int64
-		phoneQuery := tx.Model(&entity.SysUser{}).Where("phone = ?", *phone)
+		phoneQuery := tx.Model(&entity.User{}).Where("phone = ?", *phone)
 		if excludeID > 0 {
 			phoneQuery = phoneQuery.Where("id <> ?", excludeID)
 		}
@@ -566,7 +569,7 @@ func (s *UserService) ensureUserUniqueFields(tx *gorm.DB, username string, email
 func (s *UserService) ensureUserRelationsExist(tx *gorm.DB, deptID *int64, roleIDs []int64, postIDs []int64) error {
 	if deptID != nil {
 		var count int64
-		if err := tx.Model(&entity.SysDept{}).Where("id = ?", *deptID).Count(&count).Error; err != nil {
+		if err := tx.Model(&entity.Dept{}).Where("id = ?", *deptID).Count(&count).Error; err != nil {
 			return errcode.ErrUserDeptQueryFailed.WithErr(err)
 		}
 		if count == 0 {
@@ -588,7 +591,7 @@ func ensureUserRolesExist(tx *gorm.DB, roleIDs []int64) error {
 		return nil
 	}
 	var count int64
-	if err := tx.Model(&entity.SysRole{}).Where("id IN ?", roleIDs).Count(&count).Error; err != nil {
+	if err := tx.Model(&entity.Role{}).Where("id IN ?", roleIDs).Count(&count).Error; err != nil {
 		return errcode.ErrUserRoleQueryFailed.WithErr(err)
 	}
 	if count != int64(len(roleIDs)) {
@@ -603,7 +606,7 @@ func ensureUserPostsExist(tx *gorm.DB, postIDs []int64) error {
 		return nil
 	}
 	var count int64
-	if err := tx.Model(&entity.SysPost{}).Where("id IN ?", postIDs).Count(&count).Error; err != nil {
+	if err := tx.Model(&entity.Post{}).Where("id IN ?", postIDs).Count(&count).Error; err != nil {
 		return errcode.ErrUserPostQueryFailed.WithErr(err)
 	}
 	if count != int64(len(postIDs)) {
@@ -615,7 +618,7 @@ func ensureUserPostsExist(tx *gorm.DB, postIDs []int64) error {
 // ensureUserExists 校验用户存在且未被软删除。
 func ensureUserExists(tx *gorm.DB, userID int64) error {
 	var count int64
-	if err := tx.Model(&entity.SysUser{}).Where("id = ?", userID).Count(&count).Error; err != nil {
+	if err := tx.Model(&entity.User{}).Where("id = ?", userID).Count(&count).Error; err != nil {
 		return errcode.ErrUserQueryFailed.WithErr(err)
 	}
 	if count == 0 {
@@ -627,7 +630,7 @@ func ensureUserExists(tx *gorm.DB, userID int64) error {
 // ensureUsersExist 校验用户 ID 集合全部存在且未被软删除。
 func ensureUsersExist(tx *gorm.DB, userIDs []int64) error {
 	var count int64
-	if err := tx.Model(&entity.SysUser{}).Where("id IN ?", userIDs).Count(&count).Error; err != nil {
+	if err := tx.Model(&entity.User{}).Where("id IN ?", userIDs).Count(&count).Error; err != nil {
 		return errcode.ErrUserQueryFailed.WithErr(err)
 	}
 	if count != int64(len(userIDs)) {
@@ -638,30 +641,30 @@ func ensureUsersExist(tx *gorm.DB, userIDs []int64) error {
 
 // replaceUserRoles 使用新的角色 ID 集合替换用户角色绑定。
 func replaceUserRoles(tx *gorm.DB, userID int64, roleIDs []int64) error {
-	if err := tx.Where("user_id = ?", userID).Delete(&entity.SysUserRole{}).Error; err != nil {
+	if err := tx.Where("user_id = ?", userID).Delete(&entity.UserRole{}).Error; err != nil {
 		return err
 	}
 	if len(roleIDs) == 0 {
 		return nil
 	}
-	bindings := make([]entity.SysUserRole, 0, len(roleIDs))
+	bindings := make([]entity.UserRole, 0, len(roleIDs))
 	for _, roleID := range roleIDs {
-		bindings = append(bindings, entity.SysUserRole{UserID: userID, RoleID: roleID})
+		bindings = append(bindings, entity.UserRole{UserID: userID, RoleID: roleID})
 	}
 	return tx.Create(&bindings).Error
 }
 
 // replaceUserPosts 使用新的岗位 ID 集合替换用户岗位绑定。
 func replaceUserPosts(tx *gorm.DB, userID int64, postIDs []int64) error {
-	if err := tx.Where("user_id = ?", userID).Delete(&entity.SysUserPost{}).Error; err != nil {
+	if err := tx.Where("user_id = ?", userID).Delete(&entity.UserPost{}).Error; err != nil {
 		return err
 	}
 	if len(postIDs) == 0 {
 		return nil
 	}
-	bindings := make([]entity.SysUserPost, 0, len(postIDs))
+	bindings := make([]entity.UserPost, 0, len(postIDs))
 	for _, postID := range postIDs {
-		bindings = append(bindings, entity.SysUserPost{UserID: userID, PostID: postID})
+		bindings = append(bindings, entity.UserPost{UserID: userID, PostID: postID})
 	}
 	return tx.Create(&bindings).Error
 }
@@ -688,7 +691,7 @@ func normalizeUserPage(in *dto.UserListReq) (int, int) {
 func (s *UserService) userRoleIDs(ctx context.Context, userID int64) ([]int64, error) {
 	var roleIDs []int64
 	if err := s.db.WithContext(ctx).
-		Model(&entity.SysUserRole{}).
+		Model(&entity.UserRole{}).
 		Where("user_id = ?", userID).
 		Order("role_id ASC").
 		Pluck("role_id", &roleIDs).Error; err != nil {
@@ -701,7 +704,7 @@ func (s *UserService) userRoleIDs(ctx context.Context, userID int64) ([]int64, e
 func (s *UserService) userPostIDs(ctx context.Context, userID int64) ([]int64, error) {
 	var postIDs []int64
 	if err := s.db.WithContext(ctx).
-		Model(&entity.SysUserPost{}).
+		Model(&entity.UserPost{}).
 		Where("user_id = ?", userID).
 		Order("post_id ASC").
 		Pluck("post_id", &postIDs).Error; err != nil {
@@ -711,7 +714,7 @@ func (s *UserService) userPostIDs(ctx context.Context, userID int64) ([]int64, e
 }
 
 // userToListItemResp 将用户实体转换为列表项响应。
-func userToListItemResp(user *entity.SysUser) *dto.UserListItemResp {
+func userToListItemResp(user *entity.User) *dto.UserListItemResp {
 	return &dto.UserListItemResp{
 		ID:        user.ID,
 		Username:  user.Username,
@@ -729,7 +732,7 @@ func userToListItemResp(user *entity.SysUser) *dto.UserListItemResp {
 }
 
 // userToDetailResp 将用户实体及绑定关系转换为详情响应。
-func userToDetailResp(user *entity.SysUser, roleIDs []int64, postIDs []int64) *dto.UserDetailResp {
+func userToDetailResp(user *entity.User, roleIDs []int64, postIDs []int64) *dto.UserDetailResp {
 	return &dto.UserDetailResp{
 		ID:        user.ID,
 		Username:  user.Username,
@@ -746,4 +749,28 @@ func userToDetailResp(user *entity.SysUser, roleIDs []int64, postIDs []int64) *d
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}
+}
+
+// GetByUsername 按用户名精确查询单个用户实体。
+//
+// 用于账号密码登录场景。ErrRecordNotFound 与其他查询错误统一映射为
+// ErrAuthUserNotFound，对外暴露"账号或密码错误"文案以避免账号枚举。
+// 命中软删除记录同样返回 ErrAuthUserNotFound。
+func (s *UserService) GetByUsername(ctx context.Context, username string) (*entity.User, error) {
+	logger := s.logger
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return nil, errcode.ErrAuthUsernameRequired
+	}
+	user := &entity.User{}
+	err := s.db.WithContext(ctx).Where("username = ?", username).First(user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Warn("查询用户失败：用户不存在", zap.String("username", username))
+			return nil, errcode.ErrAuthUserNotFound
+		}
+		logger.Error("查询用户失败：数据库错误", zap.String("username", username), zap.Error(err))
+		return nil, errcode.ErrAuthUserQueryFailed.WithErr(err)
+	}
+	return user, nil
 }

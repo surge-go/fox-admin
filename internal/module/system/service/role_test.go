@@ -52,7 +52,7 @@ func TestRoleServiceCreateSavesRoleAndCustomDepts(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	var role entity.SysRole
+	var role entity.Role
 	if err := service.db.Where("code = ?", "admin").First(&role).Error; err != nil {
 		t.Fatalf("query role: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestRoleServiceCreateSavesRoleAndCustomDepts(t *testing.T) {
 	}
 
 	var deptIDs []int64
-	if err := service.db.Model(&entity.SysRoleDept{}).Where("role_id = ?", role.ID).Pluck("dept_id", &deptIDs).Error; err != nil {
+	if err := service.db.Model(&entity.RoleDept{}).Where("role_id = ?", role.ID).Pluck("dept_id", &deptIDs).Error; err != nil {
 		t.Fatalf("query role depts: %v", err)
 	}
 	if !reflect.DeepEqual(deptIDs, []int64{dept.ID}) {
@@ -110,7 +110,7 @@ func TestRoleServiceCreateRejectsInvalidDataScopeAndDept(t *testing.T) {
 func TestRoleServiceDeleteRejectsUserBinding(t *testing.T) {
 	service := newTestRoleService(t)
 	role := createTestRole(t, service.db, "管理员", "admin")
-	if err := service.db.Create(&entity.SysUserRole{UserID: 1, RoleID: role.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.UserRole{UserID: 1, RoleID: role.ID}).Error; err != nil {
 		t.Fatalf("create user role: %v", err)
 	}
 
@@ -125,10 +125,10 @@ func TestRoleServiceDeleteRemovesBindingsAndSoftDeletesRole(t *testing.T) {
 	role := createTestRole(t, service.db, "管理员", "admin")
 	dept := createTestDept(t, service.db, "研发部")
 	menu := createTestRoleMenu(t, service.db, "system", "/system")
-	if err := service.db.Create(&entity.SysRoleDept{RoleID: role.ID, DeptID: dept.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.RoleDept{RoleID: role.ID, DeptID: dept.ID}).Error; err != nil {
 		t.Fatalf("create role dept: %v", err)
 	}
-	if err := service.db.Create(&entity.SysRoleMenu{RoleID: role.ID, MenuID: menu.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.RoleMenu{RoleID: role.ID, MenuID: menu.ID}).Error; err != nil {
 		t.Fatalf("create role menu: %v", err)
 	}
 
@@ -137,19 +137,19 @@ func TestRoleServiceDeleteRemovesBindingsAndSoftDeletesRole(t *testing.T) {
 	}
 
 	var count int64
-	if err := service.db.Model(&entity.SysRole{}).Where("id = ?", role.ID).Count(&count).Error; err != nil {
+	if err := service.db.Model(&entity.Role{}).Where("id = ?", role.ID).Count(&count).Error; err != nil {
 		t.Fatalf("count role: %v", err)
 	}
 	if count != 0 {
 		t.Fatalf("role count = %d, want 0", count)
 	}
-	if err := service.db.Model(&entity.SysRoleDept{}).Where("role_id = ?", role.ID).Count(&count).Error; err != nil {
+	if err := service.db.Model(&entity.RoleDept{}).Where("role_id = ?", role.ID).Count(&count).Error; err != nil {
 		t.Fatalf("count role dept: %v", err)
 	}
 	if count != 0 {
 		t.Fatalf("role dept count = %d, want 0", count)
 	}
-	if err := service.db.Model(&entity.SysRoleMenu{}).Where("role_id = ?", role.ID).Count(&count).Error; err != nil {
+	if err := service.db.Model(&entity.RoleMenu{}).Where("role_id = ?", role.ID).Count(&count).Error; err != nil {
 		t.Fatalf("count role menu: %v", err)
 	}
 	if count != 0 {
@@ -162,7 +162,7 @@ func TestRoleServiceUpdateSavesRoleAndReplacesCustomDepts(t *testing.T) {
 	role := createTestRole(t, service.db, "管理员", "admin")
 	oldDept := createTestDept(t, service.db, "研发部")
 	newDept := createTestDept(t, service.db, "市场部")
-	if err := service.db.Create(&entity.SysRoleDept{RoleID: role.ID, DeptID: oldDept.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.RoleDept{RoleID: role.ID, DeptID: oldDept.ID}).Error; err != nil {
 		t.Fatalf("create role dept: %v", err)
 	}
 
@@ -182,7 +182,7 @@ func TestRoleServiceUpdateSavesRoleAndReplacesCustomDepts(t *testing.T) {
 		t.Fatalf("Update() error = %v", err)
 	}
 
-	var got entity.SysRole
+	var got entity.Role
 	if err := service.db.First(&got, role.ID).Error; err != nil {
 		t.Fatalf("query role: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestRoleServiceUpdateSavesRoleAndReplacesCustomDepts(t *testing.T) {
 	}
 
 	var deptIDs []int64
-	if err := service.db.Model(&entity.SysRoleDept{}).Where("role_id = ?", role.ID).Pluck("dept_id", &deptIDs).Error; err != nil {
+	if err := service.db.Model(&entity.RoleDept{}).Where("role_id = ?", role.ID).Pluck("dept_id", &deptIDs).Error; err != nil {
 		t.Fatalf("query role depts: %v", err)
 	}
 	if !reflect.DeepEqual(deptIDs, []int64{newDept.ID}) {
@@ -208,7 +208,7 @@ func TestRoleServiceUpdatePreservesDataScopeWhenOmitted(t *testing.T) {
 	}).Error; err != nil {
 		t.Fatalf("update role data scope: %v", err)
 	}
-	if err := service.db.Create(&entity.SysRoleDept{RoleID: role.ID, DeptID: dept.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.RoleDept{RoleID: role.ID, DeptID: dept.ID}).Error; err != nil {
 		t.Fatalf("create role dept: %v", err)
 	}
 
@@ -221,7 +221,7 @@ func TestRoleServiceUpdatePreservesDataScopeWhenOmitted(t *testing.T) {
 		t.Fatalf("Update() error = %v", err)
 	}
 
-	var got entity.SysRole
+	var got entity.Role
 	if err := service.db.First(&got, role.ID).Error; err != nil {
 		t.Fatalf("query role: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestRoleServiceUpdatePreservesDataScopeWhenOmitted(t *testing.T) {
 	}
 
 	var deptIDs []int64
-	if err := service.db.Model(&entity.SysRoleDept{}).Where("role_id = ?", role.ID).Pluck("dept_id", &deptIDs).Error; err != nil {
+	if err := service.db.Model(&entity.RoleDept{}).Where("role_id = ?", role.ID).Pluck("dept_id", &deptIDs).Error; err != nil {
 		t.Fatalf("query role depts: %v", err)
 	}
 	if !reflect.DeepEqual(deptIDs, []int64{dept.ID}) {
@@ -262,7 +262,7 @@ func TestRoleServiceAssignMenusReplacesMenus(t *testing.T) {
 	role := createTestRole(t, service.db, "管理员", "admin")
 	oldMenu := createTestRoleMenu(t, service.db, "system", "/system")
 	newMenu := createTestRoleMenu(t, service.db, "system-user", "/system/user")
-	if err := service.db.Create(&entity.SysRoleMenu{RoleID: role.ID, MenuID: oldMenu.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.RoleMenu{RoleID: role.ID, MenuID: oldMenu.ID}).Error; err != nil {
 		t.Fatalf("create role menu: %v", err)
 	}
 
@@ -275,7 +275,7 @@ func TestRoleServiceAssignMenusReplacesMenus(t *testing.T) {
 	}
 
 	var menuIDs []int64
-	if err := service.db.Model(&entity.SysRoleMenu{}).Where("role_id = ?", role.ID).Pluck("menu_id", &menuIDs).Error; err != nil {
+	if err := service.db.Model(&entity.RoleMenu{}).Where("role_id = ?", role.ID).Pluck("menu_id", &menuIDs).Error; err != nil {
 		t.Fatalf("query role menus: %v", err)
 	}
 	if !reflect.DeepEqual(menuIDs, []int64{newMenu.ID}) {
@@ -298,10 +298,10 @@ func TestRoleServiceDetailReturnsBindings(t *testing.T) {
 	role := createTestRole(t, service.db, "管理员", "admin")
 	dept := createTestDept(t, service.db, "研发部")
 	menu := createTestRoleMenu(t, service.db, "system", "/system")
-	if err := service.db.Create(&entity.SysRoleDept{RoleID: role.ID, DeptID: dept.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.RoleDept{RoleID: role.ID, DeptID: dept.ID}).Error; err != nil {
 		t.Fatalf("create role dept: %v", err)
 	}
-	if err := service.db.Create(&entity.SysRoleMenu{RoleID: role.ID, MenuID: menu.ID}).Error; err != nil {
+	if err := service.db.Create(&entity.RoleMenu{RoleID: role.ID, MenuID: menu.ID}).Error; err != nil {
 		t.Fatalf("create role menu: %v", err)
 	}
 
@@ -328,7 +328,7 @@ func TestRoleServiceUpdateStatusUpdatesRoles(t *testing.T) {
 	}
 
 	var statuses []int
-	if err := service.db.Model(&entity.SysRole{}).
+	if err := service.db.Model(&entity.Role{}).
 		Where("id IN ?", []int64{admin.ID, audit.ID}).
 		Order("id ASC").
 		Pluck("status", &statuses).Error; err != nil {
@@ -372,22 +372,22 @@ func newTestRoleService(t *testing.T) *RoleService {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	if err := db.Migrator().DropTable(
-		&entity.SysRoleMenu{},
-		&entity.SysRoleDept{},
-		&entity.SysUserRole{},
-		&entity.SysMenu{},
-		&entity.SysDept{},
-		&entity.SysRole{},
+		&entity.RoleMenu{},
+		&entity.RoleDept{},
+		&entity.UserRole{},
+		&entity.Menu{},
+		&entity.Dept{},
+		&entity.Role{},
 	); err != nil {
 		t.Fatalf("drop tables: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&entity.SysRole{},
-		&entity.SysDept{},
-		&entity.SysMenu{},
-		&entity.SysUserRole{},
-		&entity.SysRoleMenu{},
-		&entity.SysRoleDept{},
+		&entity.Role{},
+		&entity.Dept{},
+		&entity.Menu{},
+		&entity.UserRole{},
+		&entity.RoleMenu{},
+		&entity.RoleDept{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -401,15 +401,15 @@ func validRoleCreateReq() *dto.RoleCreateReq {
 	}
 }
 
-func createTestRole(t *testing.T, db *gorm.DB, name string, code string) *entity.SysRole {
+func createTestRole(t *testing.T, db *gorm.DB, name string, code string) *entity.Role {
 	t.Helper()
 	return createTestRoleWithOptions(t, db, name, code, 0, defaultRoleStatus)
 }
 
-func createTestRoleWithOptions(t *testing.T, db *gorm.DB, name string, code string, sortValue int, status int) *entity.SysRole {
+func createTestRoleWithOptions(t *testing.T, db *gorm.DB, name string, code string, sortValue int, status int) *entity.Role {
 	t.Helper()
 
-	role := &entity.SysRole{
+	role := &entity.Role{
 		Name:      name,
 		Code:      code,
 		DataScope: ptr.Of(defaultRoleDataScope),
@@ -422,10 +422,10 @@ func createTestRoleWithOptions(t *testing.T, db *gorm.DB, name string, code stri
 	return role
 }
 
-func createTestDept(t *testing.T, db *gorm.DB, name string) *entity.SysDept {
+func createTestDept(t *testing.T, db *gorm.DB, name string) *entity.Dept {
 	t.Helper()
 
-	dept := &entity.SysDept{
+	dept := &entity.Dept{
 		Name:   name,
 		Status: ptr.Of(defaultRoleStatus),
 	}
@@ -435,10 +435,10 @@ func createTestDept(t *testing.T, db *gorm.DB, name string) *entity.SysDept {
 	return dept
 }
 
-func createTestRoleMenu(t *testing.T, db *gorm.DB, name string, path string) *entity.SysMenu {
+func createTestRoleMenu(t *testing.T, db *gorm.DB, name string, path string) *entity.Menu {
 	t.Helper()
 
-	menu := &entity.SysMenu{
+	menu := &entity.Menu{
 		Path:   path,
 		Name:   name,
 		Type:   "menu",

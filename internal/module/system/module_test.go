@@ -26,7 +26,7 @@ func TestMigrateSeedsDefaultData(t *testing.T) {
 	}
 
 	var userCount int64
-	if err := db.Model(&entity.SysUser{}).Where("username = ?", "admin").Count(&userCount).Error; err != nil {
+	if err := db.Model(&entity.User{}).Where("username = ?", "admin").Count(&userCount).Error; err != nil {
 		t.Fatalf("count admin user: %v", err)
 	}
 	if userCount != 1 {
@@ -34,7 +34,7 @@ func TestMigrateSeedsDefaultData(t *testing.T) {
 	}
 
 	var roleCount int64
-	if err := db.Model(&entity.SysRole{}).Where("code = ?", "admin").Count(&roleCount).Error; err != nil {
+	if err := db.Model(&entity.Role{}).Where("code = ?", "admin").Count(&roleCount).Error; err != nil {
 		t.Fatalf("count admin role: %v", err)
 	}
 	if roleCount != 1 {

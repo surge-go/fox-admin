@@ -2,8 +2,8 @@ package entity
 
 import "time"
 
-// SysRoleDept 表示系统角色部门关联表。
-type SysRoleDept struct {
+// RoleDept 表示系统角色部门关联表。
+type RoleDept struct {
 	// ID 是角色部门关联主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// RoleID 是角色 ID。
@@ -15,6 +15,6 @@ type SysRoleDept struct {
 }
 
 // TableName 返回系统角色部门关联表名。
-func (SysRoleDept) TableName() string {
-	return "sys_role_dept"
+func (RoleDept) TableName() string {
+	return tableName("sys_role_dept")
 }

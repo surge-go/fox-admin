@@ -2,8 +2,8 @@ package entity
 
 import "time"
 
-// SysUserRole 表示系统用户角色关联表。
-type SysUserRole struct {
+// UserRole 表示系统用户角色关联表。
+type UserRole struct {
 	// ID 是用户角色关联主键。
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// UserID 是用户 ID。
@@ -15,6 +15,6 @@ type SysUserRole struct {
 }
 
 // TableName 返回系统用户角色关联表名。
-func (SysUserRole) TableName() string {
-	return "sys_user_role"
+func (UserRole) TableName() string {
+	return tableName("sys_user_role")
 }
