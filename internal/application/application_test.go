@@ -66,7 +66,7 @@ func TestNewLoadsConfig(t *testing.T) {
 }
 
 func TestDefaultConfigUsesOTLPHTTPAndMySQL(t *testing.T) {
-	loader := coreconfig.New(coreconfig.WithConfigFile("../../configs/config.yaml"))
+	loader := coreconfig.New(coreconfig.WithConfigFile("../../configs/config.example.yaml"))
 	if err := loader.Load(); err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

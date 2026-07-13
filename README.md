@@ -19,17 +19,23 @@ fox-admin 是基于 `github.com/surge-go/fox` 的后端项目。
 
 ## 开发
 
+首次启动前复制示例配置，并按本地环境修改实际配置：
+
+```bash
+cp configs/config.example.yaml configs/config.yaml
+```
+
 在仓库根目录执行后端命令：
 
 ```bash
 go test ./...
 ```
 
-后续服务入口、配置文件和路由代码也应直接放在当前 Go 模块下，例如：
+服务入口、示例配置文件和路由代码直接放在当前 Go 模块下，例如：
 
 ```text
 cmd/fox-admin
-config
+configs/config.example.yaml
 internal/router
 ```
 

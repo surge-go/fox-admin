@@ -1,0 +1,1113 @@
+definitions:
+  menu.CreateReq:
+    properties:
+      active_menu:
+        type: string
+      component:
+        type: string
+      external_url:
+        type: string
+      hide_children_in_menu:
+        type: boolean
+      hide_in_menu:
+        type: boolean
+      icon:
+        type: string
+      ignore_cache:
+        type: boolean
+      locale:
+        type: string
+      name:
+        type: string
+      no_affix:
+        type: boolean
+      order:
+        type: integer
+      parent_id:
+        type: integer
+      path:
+        type: string
+      redirect:
+        type: string
+      remark:
+        type: string
+      status:
+        type: integer
+      title:
+        type: string
+      type:
+        type: string
+    type: object
+  menu.DeleteReq:
+    properties:
+      id:
+        type: integer
+    type: object
+  menu.UpdateReq:
+    properties:
+      active_menu:
+        type: string
+      component:
+        type: string
+      external_url:
+        type: string
+      hide_children_in_menu:
+        type: boolean
+      hide_in_menu:
+        type: boolean
+      icon:
+        type: string
+      id:
+        type: integer
+      ignore_cache:
+        type: boolean
+      locale:
+        type: string
+      name:
+        type: string
+      no_affix:
+        type: boolean
+      order:
+        type: integer
+      parent_id:
+        type: integer
+      path:
+        type: string
+      redirect:
+        type: string
+      remark:
+        type: string
+      status:
+        type: integer
+      title:
+        type: string
+      type:
+        type: string
+    type: object
+  permission.CreateReq:
+    properties:
+      code:
+        type: string
+      menu_id:
+        type: integer
+      name:
+        type: string
+      remark:
+        type: string
+      sort:
+        type: integer
+      status:
+        type: integer
+    type: object
+  permission.DeleteReq:
+    properties:
+      id:
+        type: integer
+    type: object
+  permission.UpdateReq:
+    properties:
+      code:
+        type: string
+      id:
+        type: integer
+      menu_id:
+        type: integer
+      name:
+        type: string
+      remark:
+        type: string
+      sort:
+        type: integer
+      status:
+        type: integer
+    type: object
+  permission.UpdateStatusReq:
+    properties:
+      ids:
+        items:
+          type: integer
+        type: array
+      status:
+        type: integer
+    type: object
+  role.AssignDeptsReq:
+    properties:
+      data_scope:
+        type: string
+      dept_ids:
+        items:
+          type: integer
+        type: array
+      id:
+        type: integer
+    type: object
+  role.AssignResourcesReq:
+    properties:
+      id:
+        type: integer
+      menu_ids:
+        items:
+          type: integer
+        type: array
+      permission_ids:
+        items:
+          type: integer
+        type: array
+    type: object
+  role.CreateReq:
+    properties:
+      code:
+        type: string
+      data_scope:
+        type: string
+      dept_ids:
+        items:
+          type: integer
+        type: array
+      menu_ids:
+        items:
+          type: integer
+        type: array
+      name:
+        type: string
+      permission_ids:
+        items:
+          type: integer
+        type: array
+      remark:
+        type: string
+      sort:
+        type: integer
+      status:
+        type: integer
+    type: object
+  role.DeleteReq:
+    properties:
+      ids:
+        items:
+          type: integer
+        type: array
+    type: object
+  role.UpdateReq:
+    properties:
+      code:
+        type: string
+      data_scope:
+        type: string
+      dept_ids:
+        items:
+          type: integer
+        type: array
+      id:
+        type: integer
+      menu_ids:
+        items:
+          type: integer
+        type: array
+      name:
+        type: string
+      permission_ids:
+        items:
+          type: integer
+        type: array
+      remark:
+        type: string
+      sort:
+        type: integer
+      status:
+        type: integer
+    type: object
+  role.UpdateStatusReq:
+    properties:
+      ids:
+        items:
+          type: integer
+        type: array
+      status:
+        type: integer
+    type: object
+  user.AssignRolesReq:
+    properties:
+      id:
+        type: integer
+      role_ids:
+        items:
+          type: integer
+        type: array
+    type: object
+  user.CreateReq:
+    properties:
+      avatar:
+        type: string
+      dept_id:
+        type: integer
+      email:
+        type: string
+      gender:
+        type: integer
+      nickname:
+        type: string
+      password:
+        type: string
+      phone:
+        type: string
+      post_ids:
+        items:
+          type: integer
+        type: array
+      remark:
+        type: string
+      role_ids:
+        items:
+          type: integer
+        type: array
+      status:
+        type: integer
+      username:
+        type: string
+    type: object
+  user.DeleteReq:
+    properties:
+      ids:
+        items:
+          type: integer
+        type: array
+    type: object
+  user.ResetPasswordReq:
+    properties:
+      id:
+        type: integer
+      password:
+        type: string
+    type: object
+  user.UpdateReq:
+    properties:
+      avatar:
+        type: string
+      dept_id:
+        type: integer
+      email:
+        type: string
+      gender:
+        type: integer
+      id:
+        type: integer
+      nickname:
+        type: string
+      phone:
+        type: string
+      post_ids:
+        items:
+          type: integer
+        type: array
+      remark:
+        type: string
+      role_ids:
+        items:
+          type: integer
+        type: array
+      status:
+        type: integer
+      username:
+        type: string
+    type: object
+  user.UpdateStatusReq:
+    properties:
+      ids:
+        items:
+          type: integer
+        type: array
+      status:
+        type: integer
+    type: object
+info:
+  contact: {}
+paths:
+  /api/v1/system/menu/create:
+    post:
+      consumes:
+      - application/json
+      description: 创建目录、页面菜单或外链菜单
+      parameters:
+      - description: 创建菜单请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/menu.CreateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 创建菜单
+      tags:
+      - 系统菜单
+  /api/v1/system/menu/delete:
+    post:
+      consumes:
+      - application/json
+      description: 删除没有子菜单、角色绑定和操作权限的菜单
+      parameters:
+      - description: 删除菜单请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/menu.DeleteReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 删除菜单
+      tags:
+      - 系统菜单
+  /api/v1/system/menu/detail:
+    get:
+      description: 根据菜单 ID 查询菜单详情
+      parameters:
+      - description: 菜单 ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 菜单详情
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 查询菜单详情
+      tags:
+      - 系统菜单
+  /api/v1/system/menu/options:
+    get:
+      description: 查询启用菜单树及菜单下的启用操作权限
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 菜单资源选项
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 查询菜单资源选项
+      tags:
+      - 系统菜单
+  /api/v1/system/menu/tree:
+    get:
+      description: 查询包含启用和禁用菜单的管理树
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 菜单树
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 查询菜单树
+      tags:
+      - 系统菜单
+  /api/v1/system/menu/update:
+    post:
+      consumes:
+      - application/json
+      description: 更新菜单路由和展示配置
+      parameters:
+      - description: 更新菜单请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/menu.UpdateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 更新菜单
+      tags:
+      - 系统菜单
+  /api/v1/system/permission/create:
+    post:
+      consumes:
+      - application/json
+      description: 创建菜单下的操作权限
+      parameters:
+      - description: 创建权限请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/permission.CreateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 创建权限
+      tags:
+      - 系统权限
+  /api/v1/system/permission/delete:
+    post:
+      consumes:
+      - application/json
+      description: 删除指定权限，已绑定角色的权限不能删除
+      parameters:
+      - description: 删除权限请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/permission.DeleteReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 删除权限
+      tags:
+      - 系统权限
+  /api/v1/system/permission/detail:
+    get:
+      description: 根据权限 ID 查询权限详情
+      parameters:
+      - description: 权限 ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 权限详情
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 查询权限详情
+      tags:
+      - 系统权限
+  /api/v1/system/permission/list:
+    get:
+      description: 查询指定菜单下的全部权限，包含启用和禁用权限
+      parameters:
+      - description: 菜单 ID
+        in: query
+        name: menu_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 权限列表
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 查询菜单权限列表
+      tags:
+      - 系统权限
+  /api/v1/system/permission/update:
+    post:
+      consumes:
+      - application/json
+      description: 更新权限基础信息，已绑定角色的权限不能变更所属菜单
+      parameters:
+      - description: 更新权限请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/permission.UpdateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 更新权限
+      tags:
+      - 系统权限
+  /api/v1/system/permission/update-status:
+    post:
+      consumes:
+      - application/json
+      description: 批量启用或禁用权限
+      parameters:
+      - description: 更新权限状态请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/permission.UpdateStatusReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 批量更新权限状态
+      tags:
+      - 系统权限
+  /api/v1/system/role/assign-depts:
+    post:
+      consumes:
+      - application/json
+      description: 更新角色数据权限范围及自定义部门集合
+      parameters:
+      - description: 分配角色数据权限请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/role.AssignDeptsReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分配成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 分配角色数据权限
+      tags:
+      - 系统角色
+  /api/v1/system/role/assign-resources:
+    post:
+      consumes:
+      - application/json
+      description: 替换角色绑定的菜单和操作权限
+      parameters:
+      - description: 分配角色资源请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/role.AssignResourcesReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分配成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 分配角色资源
+      tags:
+      - 系统角色
+  /api/v1/system/role/create:
+    post:
+      consumes:
+      - application/json
+      description: 创建角色并保存菜单、权限和数据权限部门绑定
+      parameters:
+      - description: 创建角色请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/role.CreateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 创建角色
+      tags:
+      - 系统角色
+  /api/v1/system/role/delete:
+    post:
+      consumes:
+      - application/json
+      description: 批量删除未绑定用户的角色
+      parameters:
+      - description: 删除角色请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/role.DeleteReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 删除角色
+      tags:
+      - 系统角色
+  /api/v1/system/role/detail:
+    get:
+      description: 查询角色及其菜单、权限和部门绑定详情
+      parameters:
+      - description: 角色 ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 角色详情
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 查询角色详情
+      tags:
+      - 系统角色
+  /api/v1/system/role/list:
+    get:
+      description: 分页查询角色列表
+      parameters:
+      - in: query
+        name: code
+        type: string
+      - in: query
+        name: name
+        type: string
+      - in: query
+        name: page
+        type: integer
+      - in: query
+        name: size
+        type: integer
+      - in: query
+        name: status
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 角色列表
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 查询角色列表
+      tags:
+      - 系统角色
+  /api/v1/system/role/options:
+    get:
+      description: 查询全部启用角色选项
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 角色选项
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 查询角色选项
+      tags:
+      - 系统角色
+  /api/v1/system/role/update:
+    post:
+      consumes:
+      - application/json
+      description: 更新角色及其菜单、权限和数据权限部门绑定
+      parameters:
+      - description: 更新角色请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/role.UpdateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 更新角色
+      tags:
+      - 系统角色
+  /api/v1/system/role/update-status:
+    post:
+      consumes:
+      - application/json
+      description: 批量启用或禁用角色
+      parameters:
+      - description: 更新角色状态请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/role.UpdateStatusReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 批量更新角色状态
+      tags:
+      - 系统角色
+  /api/v1/system/user/assign-roles:
+    post:
+      consumes:
+      - application/json
+      description: 替换用户绑定的角色集合
+      parameters:
+      - description: 分配用户角色请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.AssignRolesReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分配成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 分配用户角色
+      tags:
+      - 系统用户
+  /api/v1/system/user/create:
+    post:
+      consumes:
+      - application/json
+      description: 创建用户并保存角色、岗位和部门信息
+      parameters:
+      - description: 创建用户请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.CreateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 创建用户
+      tags:
+      - 系统用户
+  /api/v1/system/user/delete:
+    post:
+      consumes:
+      - application/json
+      description: 批量软删除用户及其关联关系
+      parameters:
+      - description: 删除用户请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.DeleteReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 删除用户
+      tags:
+      - 系统用户
+  /api/v1/system/user/detail:
+    get:
+      description: 查询用户及其角色和岗位绑定详情
+      parameters:
+      - description: 用户 ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 用户详情
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 查询用户详情
+      tags:
+      - 系统用户
+  /api/v1/system/user/list:
+    get:
+      description: 分页查询用户列表
+      parameters:
+      - in: query
+        name: dept_id
+        type: integer
+      - in: query
+        name: gender
+        type: integer
+      - in: query
+        name: page
+        type: integer
+      - in: query
+        name: size
+        type: integer
+      - in: query
+        name: status
+        type: integer
+      - in: query
+        name: username
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 用户列表
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 查询用户列表
+      tags:
+      - 系统用户
+  /api/v1/system/user/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: 重置指定用户的登录密码
+      parameters:
+      - description: 重置密码请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.ResetPasswordReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 重置成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 重置用户密码
+      tags:
+      - 系统用户
+  /api/v1/system/user/update:
+    post:
+      consumes:
+      - application/json
+      description: 更新用户基础信息及角色、岗位和部门绑定
+      parameters:
+      - description: 更新用户请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.UpdateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 更新用户
+      tags:
+      - 系统用户
+  /api/v1/system/user/update-status:
+    post:
+      consumes:
+      - application/json
+      description: 批量启用或禁用用户
+      parameters:
+      - description: 更新用户状态请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.UpdateStatusReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 批量更新用户状态
+      tags:
+      - 系统用户
+swagger: "2.0"

@@ -6,6 +6,9 @@
 .DS_Store
 Thumbs.db
 
+# Local config
+/configs/config.yaml
+
 # Claude
 .claude/
 
