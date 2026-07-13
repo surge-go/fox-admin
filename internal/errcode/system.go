@@ -23,8 +23,8 @@ var (
 	ErrMenuSortInvalid = errors.NewWithStatus(1007, http.StatusOK, "菜单排序不能小于 0")
 	// ErrMenuStatusRequired 表示菜单状态为空。
 	ErrMenuStatusRequired = errors.NewWithStatus(1008, http.StatusOK, "菜单状态不能为空")
-	// ErrMenuPermissionRequired 表示菜单权限标识为空。
-	ErrMenuPermissionRequired = errors.NewWithStatus(1009, http.StatusOK, "菜单权限标识不能为空")
+	// ErrMenuTypeInvalid 表示菜单类型非法。
+	ErrMenuTypeInvalid = errors.NewWithStatus(1009, http.StatusOK, "菜单类型非法")
 	// ErrMenuParentNotFound 表示父菜单不存在。
 	ErrMenuParentNotFound = errors.NewWithStatus(1010, http.StatusOK, "父菜单不存在")
 	// ErrMenuPathExists 表示菜单路径已存在。
@@ -127,10 +127,6 @@ var (
 	ErrRoleListQueryFailed = errors.NewWithStatus(1059, http.StatusInternalServerError, "查询角色列表失败")
 	// ErrRoleDetailReqNil 表示角色详情请求参数为空。
 	ErrRoleDetailReqNil = errors.NewWithStatus(1060, http.StatusOK, "角色详情参数不能为空")
-	// ErrRoleAssignMenusReqNil 表示分配角色菜单请求参数为空。
-	ErrRoleAssignMenusReqNil = errors.NewWithStatus(1061, http.StatusOK, "分配角色菜单参数不能为空")
-	// ErrRoleAssignMenusFailed 表示分配角色菜单失败。
-	ErrRoleAssignMenusFailed = errors.NewWithStatus(1062, http.StatusInternalServerError, "分配角色菜单失败")
 	// ErrRoleUpdateStatusReqNil 表示更新角色状态请求参数为空。
 	ErrRoleUpdateStatusReqNil = errors.NewWithStatus(1063, http.StatusOK, "更新角色状态参数不能为空")
 	// ErrRoleIDsRequired 表示角色 ID 集合为空。
@@ -249,4 +245,86 @@ var (
 	ErrRoleAssignDeptsReqNil = errors.NewWithStatus(1120, http.StatusOK, "分配角色数据权限部门参数不能为空")
 	// ErrRoleAssignDeptsFailed 表示分配角色数据权限部门失败。
 	ErrRoleAssignDeptsFailed = errors.NewWithStatus(1121, http.StatusInternalServerError, "分配角色数据权限部门失败")
+	// ErrMenuComponentRequired 表示页面菜单组件路径为空。
+	ErrMenuComponentRequired = errors.NewWithStatus(1122, http.StatusOK, "页面菜单组件路径不能为空")
+	// ErrMenuExternalURLRequired 表示外链菜单地址为空。
+	ErrMenuExternalURLRequired = errors.NewWithStatus(1123, http.StatusOK, "外链菜单地址不能为空")
+	// ErrMenuHasPermissions 表示菜单下仍存在操作权限。
+	ErrMenuHasPermissions = errors.NewWithStatus(1124, http.StatusOK, "菜单下存在操作权限，不能删除")
+	// ErrMenuPermissionQueryFailed 表示查询菜单操作权限失败。
+	ErrMenuPermissionQueryFailed = errors.NewWithStatus(1125, http.StatusInternalServerError, "查询菜单操作权限失败")
+	// ErrMenuOptionsQueryFailed 表示查询菜单选项失败。
+	ErrMenuOptionsQueryFailed = errors.NewWithStatus(1126, http.StatusInternalServerError, "查询菜单选项失败")
+	// ErrMenuParentExternal 表示外链菜单不能作为父菜单。
+	ErrMenuParentExternal = errors.NewWithStatus(1127, http.StatusOK, "外链菜单不能作为父菜单")
+	// ErrMenuExternalHasChildren 表示存在子菜单的节点不能改为外链菜单。
+	ErrMenuExternalHasChildren = errors.NewWithStatus(1128, http.StatusOK, "存在子菜单的菜单不能改为外链菜单")
+	// ErrRolePermissionIDInvalid 表示角色权限 ID 非法。
+	ErrRolePermissionIDInvalid = errors.NewWithStatus(1129, http.StatusOK, "角色权限 ID 必须大于 0")
+	// ErrRolePermissionNotFound 表示角色绑定权限不存在或已禁用。
+	ErrRolePermissionNotFound = errors.NewWithStatus(1130, http.StatusOK, "角色绑定权限不存在或已禁用")
+	// ErrRolePermissionQueryFailed 表示查询角色权限失败。
+	ErrRolePermissionQueryFailed = errors.NewWithStatus(1131, http.StatusInternalServerError, "查询角色权限失败")
+	// ErrRolePermissionMenuRequired 表示权限所属菜单未分配给角色。
+	ErrRolePermissionMenuRequired = errors.NewWithStatus(1132, http.StatusOK, "权限所属菜单必须同时分配给角色")
+	// ErrRoleMenuDisabled 表示角色不能绑定禁用菜单。
+	ErrRoleMenuDisabled = errors.NewWithStatus(1133, http.StatusOK, "角色不能绑定禁用菜单")
+	// ErrRoleAssignResourcesReqNil 表示分配角色资源请求参数为空。
+	ErrRoleAssignResourcesReqNil = errors.NewWithStatus(1134, http.StatusOK, "分配角色资源参数不能为空")
+	// ErrRoleAssignResourcesFailed 表示分配角色资源失败。
+	ErrRoleAssignResourcesFailed = errors.NewWithStatus(1135, http.StatusInternalServerError, "分配角色资源失败")
+	// ErrPermissionCreateReqNil 表示创建权限请求参数为空。
+	ErrPermissionCreateReqNil = errors.NewWithStatus(1136, http.StatusOK, "创建权限参数不能为空")
+	// ErrPermissionMenuIDInvalid 表示权限所属菜单 ID 非法。
+	ErrPermissionMenuIDInvalid = errors.NewWithStatus(1137, http.StatusOK, "权限所属菜单 ID 必须大于 0")
+	// ErrPermissionNameRequired 表示权限名称为空。
+	ErrPermissionNameRequired = errors.NewWithStatus(1138, http.StatusOK, "权限名称不能为空")
+	// ErrPermissionCodeRequired 表示权限标识为空。
+	ErrPermissionCodeRequired = errors.NewWithStatus(1139, http.StatusOK, "权限标识不能为空")
+	// ErrPermissionSortInvalid 表示权限排序值非法。
+	ErrPermissionSortInvalid = errors.NewWithStatus(1140, http.StatusOK, "权限排序不能小于 0")
+	// ErrPermissionStatusInvalid 表示权限状态非法。
+	ErrPermissionStatusInvalid = errors.NewWithStatus(1141, http.StatusOK, "权限状态只能是 0 或 1")
+	// ErrPermissionMenuNotFound 表示权限所属菜单不存在。
+	ErrPermissionMenuNotFound = errors.NewWithStatus(1142, http.StatusOK, "权限所属菜单不存在")
+	// ErrPermissionCodeExists 表示权限标识已存在。
+	ErrPermissionCodeExists = errors.NewWithStatus(1143, http.StatusOK, "权限标识已存在")
+	// ErrPermissionMenuQueryFailed 表示查询权限所属菜单失败。
+	ErrPermissionMenuQueryFailed = errors.NewWithStatus(1144, http.StatusInternalServerError, "查询权限所属菜单失败")
+	// ErrPermissionCodeQueryFailed 表示查询权限标识失败。
+	ErrPermissionCodeQueryFailed = errors.NewWithStatus(1145, http.StatusInternalServerError, "查询权限标识失败")
+	// ErrPermissionCreateFailed 表示创建权限失败。
+	ErrPermissionCreateFailed = errors.NewWithStatus(1146, http.StatusInternalServerError, "创建权限失败")
+	// ErrPermissionDeleteReqNil 表示删除权限请求参数为空。
+	ErrPermissionDeleteReqNil = errors.NewWithStatus(1147, http.StatusOK, "删除权限参数不能为空")
+	// ErrPermissionIDInvalid 表示权限 ID 非法。
+	ErrPermissionIDInvalid = errors.NewWithStatus(1148, http.StatusOK, "权限 ID 必须大于 0")
+	// ErrPermissionNotFound 表示权限不存在。
+	ErrPermissionNotFound = errors.NewWithStatus(1149, http.StatusOK, "权限不存在")
+	// ErrPermissionHasRoleBinding 表示权限已绑定角色。
+	ErrPermissionHasRoleBinding = errors.NewWithStatus(1150, http.StatusOK, "权限已绑定角色，不能删除")
+	// ErrPermissionQueryFailed 表示查询权限失败。
+	ErrPermissionQueryFailed = errors.NewWithStatus(1151, http.StatusInternalServerError, "查询权限失败")
+	// ErrPermissionRoleBindingQueryFailed 表示查询权限角色绑定失败。
+	ErrPermissionRoleBindingQueryFailed = errors.NewWithStatus(1152, http.StatusInternalServerError, "查询权限角色绑定失败")
+	// ErrPermissionDeleteFailed 表示删除权限失败。
+	ErrPermissionDeleteFailed = errors.NewWithStatus(1153, http.StatusInternalServerError, "删除权限失败")
+	// ErrPermissionUpdateReqNil 表示更新权限请求参数为空。
+	ErrPermissionUpdateReqNil = errors.NewWithStatus(1154, http.StatusOK, "更新权限参数不能为空")
+	// ErrPermissionMenuChangeRoleBinding 表示已绑定角色的权限不能变更所属菜单。
+	ErrPermissionMenuChangeRoleBinding = errors.NewWithStatus(1155, http.StatusOK, "权限已绑定角色，不能变更所属菜单")
+	// ErrPermissionUpdateFailed 表示更新权限失败。
+	ErrPermissionUpdateFailed = errors.NewWithStatus(1156, http.StatusInternalServerError, "更新权限失败")
+	// ErrPermissionListReqNil 表示查询权限列表请求参数为空。
+	ErrPermissionListReqNil = errors.NewWithStatus(1157, http.StatusOK, "查询权限列表参数不能为空")
+	// ErrPermissionListQueryFailed 表示查询权限列表失败。
+	ErrPermissionListQueryFailed = errors.NewWithStatus(1158, http.StatusInternalServerError, "查询权限列表失败")
+	// ErrPermissionDetailReqNil 表示查询权限详情请求参数为空。
+	ErrPermissionDetailReqNil = errors.NewWithStatus(1159, http.StatusOK, "查询权限详情参数不能为空")
+	// ErrPermissionUpdateStatusReqNil 表示更新权限状态请求参数为空。
+	ErrPermissionUpdateStatusReqNil = errors.NewWithStatus(1160, http.StatusOK, "更新权限状态参数不能为空")
+	// ErrPermissionIDsRequired 表示权限 ID 集合为空。
+	ErrPermissionIDsRequired = errors.NewWithStatus(1161, http.StatusOK, "权限 ID 集合不能为空")
+	// ErrPermissionUpdateStatusFailed 表示更新权限状态失败。
+	ErrPermissionUpdateStatusFailed = errors.NewWithStatus(1162, http.StatusInternalServerError, "更新权限状态失败")
 )

@@ -9,6 +9,7 @@ import (
 
 	"fox-admin/internal/errcode"
 	"fox-admin/internal/module/system/entity"
+	"fox-admin/internal/module/system/enum"
 
 	foxerrors "github.com/surge-go/fox/core/errors"
 	"go.uber.org/zap"
@@ -54,8 +55,8 @@ func TestServiceCreateSavesUserAndBindings(t *testing.T) {
 	if got.Nickname == nil || *got.Nickname != "管理员" || got.Email == nil || *got.Email != "admin@example.com" || got.Phone == nil || *got.Phone != "13800000000" {
 		t.Fatalf("user optional fields = %#v, want trimmed non-empty values", got)
 	}
-	if got.Status == nil || *got.Status != defaultStatus || got.Gender == nil || *got.Gender != defaultGender {
-		t.Fatalf("user defaults status:%v gender:%v, want %d/%d", got.Status, got.Gender, defaultStatus, defaultGender)
+	if got.Status == nil || *got.Status != enum.StatusEnabled || got.Gender == nil || *got.Gender != defaultGender {
+		t.Fatalf("user defaults status:%v gender:%v, want %d/%d", got.Status, got.Gender, enum.StatusEnabled, defaultGender)
 	}
 
 	var roleIDs []int64
@@ -275,8 +276,8 @@ func TestServiceDeleteRemovesBindingsAndSoftDeletesUsers(t *testing.T) {
 
 func TestServiceDeleteBatchesUsers(t *testing.T) {
 	service := newTestService(t)
-	ids := make([]int64, 0, batchSize+1)
-	for i := 0; i < batchSize+1; i++ {
+	ids := make([]int64, 0, enum.BatchSize+1)
+	for i := 0; i < enum.BatchSize+1; i++ {
 		user := createTestUser(t, service.db, "batch-delete-"+strconv.Itoa(i))
 		ids = append(ids, user.ID)
 	}
@@ -784,8 +785,8 @@ func TestServiceUpdateStatusUpdatesUsers(t *testing.T) {
 
 func TestServiceUpdateStatusBatchesUsers(t *testing.T) {
 	service := newTestService(t)
-	ids := make([]int64, 0, batchSize+1)
-	for i := 0; i < batchSize+1; i++ {
+	ids := make([]int64, 0, enum.BatchSize+1)
+	for i := 0; i < enum.BatchSize+1; i++ {
 		user := createTestUser(t, service.db, "batch-status-"+strconv.Itoa(i))
 		ids = append(ids, user.ID)
 	}
@@ -1023,13 +1024,13 @@ func newTestServiceWithTablePrefix(t *testing.T, tablePrefix string) *Service {
 	if err := entity.Migrate(db, tablePrefix); err != nil {
 		t.Fatalf("migrate entities: %v", err)
 	}
-	return NewService(db, zap.NewNop(), tablePrefix)
+	return NewService(db, zap.NewNop())
 }
 
 func createTestUser(t *testing.T, db *gorm.DB, username string) *entity.User {
 	t.Helper()
 
-	status := defaultStatus
+	status := enum.StatusEnabled
 	gender := defaultGender
 	user := &entity.User{
 		Username: username,

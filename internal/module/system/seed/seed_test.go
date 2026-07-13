@@ -1,8 +1,6 @@
 package seed
 
 import (
-	"reflect"
-	"sort"
 	"testing"
 
 	"fox-admin/internal/module/system/entity"
@@ -45,41 +43,15 @@ func TestSeedCreatesDefaultSystemData(t *testing.T) {
 		t.Fatalf("user role binding count = %d, want 1", userRoleCount)
 	}
 
-	wantMenuPaths := []string{
-		"/basic",
-		"/dashboard",
-		"/document",
-		"/status",
-		"/status/board",
-		"/status/system",
-		"/system",
-		"/system/role",
-		"/system/user",
-		"/system/user/detail/:id",
+	var menuCount, roleMenuCount int64
+	if err := db.Model(&entity.Menu{}).Count(&menuCount).Error; err != nil {
+		t.Fatalf("count menus: %v", err)
 	}
-	var gotMenuPaths []string
-	if err := db.Model(&entity.Menu{}).Order("path ASC").Pluck("path", &gotMenuPaths).Error; err != nil {
-		t.Fatalf("query menu paths: %v", err)
+	if err := db.Model(&entity.RoleMenu{}).Count(&roleMenuCount).Error; err != nil {
+		t.Fatalf("count role menus: %v", err)
 	}
-	sort.Strings(wantMenuPaths)
-	if !reflect.DeepEqual(gotMenuPaths, wantMenuPaths) {
-		t.Fatalf("menu paths = %#v, want %#v", gotMenuPaths, wantMenuPaths)
-	}
-
-	for _, path := range []string{"/dashboard", "/system", "/system/user", "/system/role", "/status/system"} {
-		var menu entity.Menu
-		if err := db.Where("path = ?", path).First(&menu).Error; err != nil {
-			t.Fatalf("query menu %s: %v", path, err)
-		}
-		var roleMenuCount int64
-		if err := db.Model(&entity.RoleMenu{}).
-			Where("role_id = ? AND menu_id = ?", role.ID, menu.ID).
-			Count(&roleMenuCount).Error; err != nil {
-			t.Fatalf("query role menu binding %s: %v", path, err)
-		}
-		if roleMenuCount != 1 {
-			t.Fatalf("role menu binding count for %s = %d, want 1", path, roleMenuCount)
-		}
+	if menuCount != 0 || roleMenuCount != 0 {
+		t.Fatalf("seeded menu data = menu:%d role_menu:%d, want 0/0", menuCount, roleMenuCount)
 	}
 }
 
@@ -92,21 +64,24 @@ func TestSeedIsIdempotent(t *testing.T) {
 		t.Fatalf("Seed() second error = %v", err)
 	}
 
-	var userCount, roleCount, menuCount, userRoleCount int64
+	var userCount, roleCount, menuCount, roleMenuCount, userRoleCount int64
 	if err := db.Model(&entity.User{}).Where("username = ?", "admin").Count(&userCount).Error; err != nil {
 		t.Fatalf("count users: %v", err)
 	}
 	if err := db.Model(&entity.Role{}).Where("code = ?", "admin").Count(&roleCount).Error; err != nil {
 		t.Fatalf("count roles: %v", err)
 	}
-	if err := db.Model(&entity.Menu{}).Where("path = ?", "/system/user").Count(&menuCount).Error; err != nil {
+	if err := db.Model(&entity.Menu{}).Count(&menuCount).Error; err != nil {
 		t.Fatalf("count menus: %v", err)
+	}
+	if err := db.Model(&entity.RoleMenu{}).Count(&roleMenuCount).Error; err != nil {
+		t.Fatalf("count role menus: %v", err)
 	}
 	if err := db.Model(&entity.UserRole{}).Count(&userRoleCount).Error; err != nil {
 		t.Fatalf("count user roles: %v", err)
 	}
-	if userCount != 1 || roleCount != 1 || menuCount != 1 || userRoleCount != 1 {
-		t.Fatalf("counts after repeated seed = user:%d role:%d menu:%d user_role:%d, want all 1", userCount, roleCount, menuCount, userRoleCount)
+	if userCount != 1 || roleCount != 1 || menuCount != 0 || roleMenuCount != 0 || userRoleCount != 1 {
+		t.Fatalf("counts after repeated seed = user:%d role:%d menu:%d role_menu:%d user_role:%d, want 1/1/0/0/1", userCount, roleCount, menuCount, roleMenuCount, userRoleCount)
 	}
 }
 

@@ -24,7 +24,8 @@
 | `Dept` | `sys_dept` | `dept.go` | 系统部门 |
 | `Post` | `sys_post` | `post.go` | 系统岗位 |
 | `Role` | `sys_role` | `role.go` | 系统角色 |
-| `Menu` | `sys_menu` | `menu.go` | 系统菜单、按钮和权限标识 |
+| `Menu` | `sys_menu` | `menu.go` | 系统菜单和前端路由配置 |
+| `Permission` | `sys_permission` | `permission.go` | 系统操作权限 |
 | `Config` | `sys_config` | `config.go` | 系统配置 |
 | `DictType` | `sys_dict_type` | `dict_type.go` | 字典类型 |
 | `DictData` | `sys_dict_data` | `dict_data.go` | 字典数据 |
@@ -36,6 +37,7 @@
 | `UserRole` | `sys_user_role` | `user_role.go` | 用户和角色关联 |
 | `UserPost` | `sys_user_post` | `user_post.go` | 用户和岗位关联 |
 | `RoleMenu` | `sys_role_menu` | `role_menu.go` | 角色和菜单关联 |
+| `RolePermission` | `sys_role_permission` | `role_permission.go` | 角色和操作权限关联 |
 | `RoleDept` | `sys_role_dept` | `role_dept.go` | 角色自定义数据权限部门范围 |
 
 ## 日志表
@@ -45,15 +47,45 @@
 | `LoginLog` | `sys_login_log` | `login_log.go` | 登录日志 |
 | `OperLog` | `sys_oper_log` | `oper_log.go` | 操作日志 |
 
-## 权限关系
+## 菜单路由
 
-当前权限模型以菜单和权限标识为核心：
+`Menu` 只保存服务端菜单和 Arco Pro 动态路由所需配置，暂不承载按钮或接口权限标识。
+
+菜单类型统一使用：
+
+```text
+catalog
+menu
+external
+```
+
+路由基础字段直接保存为 `path`、`name`、`component` 和 `redirect`。Arco Pro 的路由 `meta` 字段按下列关系转换：
+
+| 实体字段 | RouteMeta 字段 | 说明 |
+| --- | --- | --- |
+| `Locale` | `locale` | 菜单标题国际化键名 |
+| `Icon` | `icon` | Arco 图标组件名称 |
+| `HideInMenu` | `hideInMenu` | 是否隐藏当前菜单 |
+| `HideChildrenInMenu` | `hideChildrenInMenu` | 是否隐藏子菜单 |
+| `ActiveMenu` | `activeMenu` | 当前路由激活时高亮的菜单路由名称 |
+| `NoAffix` | `noAffix` | 是否不固定到标签栏 |
+| `IgnoreCache` | `ignoreCache` | 是否忽略页面缓存 |
+| `Order` | `order` | 同级菜单顺序，数值越小越靠前 |
+
+`external` 类型通过 `ExternalURL` 保存外链地址。登录页、重定向页、404 等基础路由由前端静态维护，服务端菜单路由统一按需要登录处理，因此实体暂不保存 `requiresAuth`。
+
+系统初始化不再写入默认菜单，也不再自动建立管理员角色和菜单的关联关系。菜单数据由后续菜单管理功能维护。
+
+## 操作权限
+
+菜单路由和操作权限分开维护：
 
 ```text
 User -> UserRole -> Role -> RoleMenu -> Menu
+User -> UserRole -> Role -> RolePermission -> Permission
 ```
 
-`Menu.Permissions` 保存菜单或按钮权限标识，例如：
+`Permission.Code` 保存后端和前端共同使用的稳定权限标识，例如：
 
 ```text
 system:user:list
@@ -62,7 +94,11 @@ system:user:update
 system:user:delete
 ```
 
-暂不单独维护 `sys_api`。如果后续需要按 `method + path` 管理接口资源，再新增接口表和角色接口关联表。
+`Permission.MenuID` 用于把操作权限归类到对应菜单，权限必须绑定具体菜单。删除菜单时是否同步删除或解除权限关系，由后续菜单服务在事务中处理，不在实体层建立数据库外键。
+
+后端接口应在路由注册时声明所需权限编码，不在权限表中保存 HTTP Method 和 Path。例如用户新增接口声明 `system:user:create`，权限中间件根据当前用户角色聚合出的权限编码进行判断。
+
+`RolePermission` 只保存角色和权限的多对多关系，不使用软删除。角色权限重新分配时应在事务中删除旧关系并批量写入新关系。
 
 ## 数据权限
 

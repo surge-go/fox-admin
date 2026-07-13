@@ -3,6 +3,7 @@ package system
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -50,6 +51,10 @@ func TestRegisterRoutesRegistersSystemRoutes(t *testing.T) {
 	if err := Migrate(db); err != nil {
 		t.Fatalf("Migrate() error = %v", err)
 	}
+	permissionMenu := &entity.Menu{Path: "/system/permission-test", Name: "PermissionTest", Type: "menu", Title: "权限测试"}
+	if err := db.Create(permissionMenu).Error; err != nil {
+		t.Fatalf("create permission test menu: %v", err)
+	}
 	engine := fox.New(&fox.Config{
 		Addr:        ":0",
 		Mode:        fox.ModeTest,
@@ -75,5 +80,26 @@ func TestRegisterRoutesRegistersSystemRoutes(t *testing.T) {
 	}
 	if body := roleRec.Body.String(); !strings.Contains(body, `"code":200`) || !strings.Contains(body, `"code":"admin"`) {
 		t.Fatalf("role body = %s, want seeded admin role", body)
+	}
+
+	menuTreeReq := httptest.NewRequest(http.MethodGet, "/api/v1/system/menu/tree", nil)
+	menuTreeRec := httptest.NewRecorder()
+	engine.ServeHTTP(menuTreeRec, menuTreeReq)
+	if menuTreeRec.Code != http.StatusOK || !strings.Contains(menuTreeRec.Body.String(), `"code":200`) {
+		t.Fatalf("menu tree status = %d; body = %s", menuTreeRec.Code, menuTreeRec.Body.String())
+	}
+
+	menuOptionsReq := httptest.NewRequest(http.MethodGet, "/api/v1/system/menu/options", nil)
+	menuOptionsRec := httptest.NewRecorder()
+	engine.ServeHTTP(menuOptionsRec, menuOptionsReq)
+	if menuOptionsRec.Code != http.StatusOK || !strings.Contains(menuOptionsRec.Body.String(), `"code":200`) || !strings.Contains(menuOptionsRec.Body.String(), `"name":"PermissionTest"`) {
+		t.Fatalf("menu options status = %d; body = %s", menuOptionsRec.Code, menuOptionsRec.Body.String())
+	}
+
+	permissionListReq := httptest.NewRequest(http.MethodGet, "/api/v1/system/permission/list?menu_id="+strconv.FormatInt(permissionMenu.ID, 10), nil)
+	permissionListRec := httptest.NewRecorder()
+	engine.ServeHTTP(permissionListRec, permissionListReq)
+	if permissionListRec.Code != http.StatusOK || !strings.Contains(permissionListRec.Body.String(), `"code":200`) || !strings.Contains(permissionListRec.Body.String(), `"data":[]`) {
+		t.Fatalf("permission list status = %d; body = %s", permissionListRec.Code, permissionListRec.Body.String())
 	}
 }

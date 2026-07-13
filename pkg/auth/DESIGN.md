@@ -70,7 +70,7 @@
 
 ## 当前范围
 
-当前实现先提供认证会话内核，并替换 `internal/module/system/service` 中手写的无状态 token 逻辑。
+当前实现先提供认证会话内核，后续由 `internal/module/system/auth` 调用，不在系统模块中重复实现 token 与 session 能力。
 
 当前包含：
 
@@ -711,9 +711,9 @@ cmd/fox-admin/main.go
   -> app.Run()
 ```
 
-后台认证路由仍归属 `internal/module/system`，和 role、menu、user 保持同级文件组织；`pkg/auth` 只提供 token、session、refresh token 等底层认证能力。
+后台认证路由归属 `internal/module/system/auth`，和 role、menu、user 保持同级领域包组织；`pkg/auth` 只提供 token、session、refresh token 等底层认证能力。
 
-`internal/module/system/service` 保留后台账号密码、用户状态、角色菜单查询逻辑，但 token 相关能力改为调用 `pkg/auth.Manager`：
+`internal/module/system/auth` 负责后台账号密码、用户状态、角色菜单查询逻辑，但 token 相关能力调用 `pkg/auth.Manager`：
 
 ```text
 Login:
@@ -787,7 +787,7 @@ auth:
         kickout_strategy: oldest
 ```
 
-`configs/config.yaml` 是可提交的安全默认配置。真实数据库、Redis、链路追踪、密钥等本地覆盖配置不应提交；如果需要本地私有配置，应使用额外未跟踪文件或部署环境注入。
+`configs/config.example.yaml` 是可提交的示例配置。`configs/config.yaml` 是本地实际配置，应加入 Git 忽略；真实数据库、Redis、链路追踪、密钥等环境配置不应提交。
 
 系统模块账号登录请求建议接收：
 
@@ -830,5 +830,5 @@ ErrAuthLoginConflict    -> 当前账号已在其他设备登录
 6. 实现 `SessionPolicy` 冲突计算，并用 Lua 返回冲突 session。
 7. 实现 `Issue`、`VerifyAccess`、`Refresh`、`RevokeSession`、`RevokeSubject`。
 8. 补齐 EventHandler 和事件定义。
-9. 替换 `internal/module/system/service` 中当前手写 token 逻辑。
+9. 在 `internal/module/system/auth` 中接入 `pkg/auth.Manager`。
 10. 增加 `/system/auth/refresh` 接口和注销真正吊销 session。

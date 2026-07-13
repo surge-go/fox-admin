@@ -16,7 +16,7 @@ type Menu struct {
 	Path string `gorm:"column:path;type:varchar(255);not null;uniqueIndex:uk_system_menu_path,priority:1"`
 	// Name 是路由名称。
 	Name string `gorm:"column:name;type:varchar(120);not null;uniqueIndex:uk_system_menu_name,priority:1"`
-	// Type 是菜单类型。
+	// Type 是菜单类型，可选值为 catalog、menu、external。
 	Type string `gorm:"column:type;type:varchar(32);not null;index"`
 	// Component 是前端组件路径。
 	Component *string `gorm:"column:component;type:varchar(255)"`
@@ -24,30 +24,24 @@ type Menu struct {
 	Redirect *string `gorm:"column:redirect;type:varchar(255)"`
 	// Title 是菜单标题。
 	Title string `gorm:"column:title;type:varchar(120);not null"`
+	// Locale 是菜单标题对应的国际化键名。
+	Locale *string `gorm:"column:locale;type:varchar(160)"`
 	// Icon 是菜单图标。
 	Icon *string `gorm:"column:icon;type:varchar(120)"`
-	// IsHide 表示是否在菜单中隐藏。
-	IsHide *bool `gorm:"column:is_hide;not null;default:false"`
-	// IsHideTab 表示是否隐藏标签页。
-	IsHideTab *bool `gorm:"column:is_hide_tab;not null;default:false"`
-	// Permissions 是菜单或按钮权限标识集合。
-	Permissions []string `gorm:"column:permissions;type:text;serializer:json"`
-	// KeepAlive 表示页面是否开启缓存。
-	KeepAlive *bool `gorm:"column:keep_alive;not null;default:false"`
-	// CacheBy 是页面缓存依据。
-	CacheBy *string `gorm:"column:cache_by;type:varchar(32)"`
-	// FixedTab 表示标签页是否固定。
-	FixedTab *bool `gorm:"column:fixed_tab;not null;default:false"`
-	// SingleTab 表示是否只保留单个标签页实例。
-	SingleTab *bool `gorm:"column:single_tab;not null;default:false"`
-	// Link 是外链地址。
-	Link *string `gorm:"column:link;type:varchar(500)"`
-	// IsExternal 表示是否为外部链接。
-	IsExternal *bool `gorm:"column:is_external;not null;default:false"`
-	// ActiveMenu 是当前路由激活时对应的菜单路径。
-	ActiveMenu *string `gorm:"column:active_menu;type:varchar(255)"`
-	// Sort 是同级菜单排序值。
-	Sort *int `gorm:"column:sort;not null;default:0;index:idx_system_menu_parent_sort,priority:2"`
+	// HideInMenu 表示是否在菜单中隐藏当前路由。
+	HideInMenu *bool `gorm:"column:hide_in_menu;not null;default:false"`
+	// HideChildrenInMenu 表示是否在菜单中隐藏当前路由的子路由。
+	HideChildrenInMenu *bool `gorm:"column:hide_children_in_menu;not null;default:false"`
+	// ActiveMenu 是当前路由激活时需要高亮的菜单路由名称。
+	ActiveMenu *string `gorm:"column:active_menu;type:varchar(120)"`
+	// NoAffix 表示是否不将当前路由固定到标签栏。
+	NoAffix *bool `gorm:"column:no_affix;not null;default:false"`
+	// IgnoreCache 表示是否忽略当前路由的页面缓存。
+	IgnoreCache *bool `gorm:"column:ignore_cache;not null;default:false"`
+	// Order 是同级菜单排序值，数值越小越靠前。
+	Order *int `gorm:"column:sort;not null;default:0;index:idx_system_menu_parent_sort,priority:2"`
+	// ExternalURL 是 external 类型菜单需要打开的外链地址。
+	ExternalURL *string `gorm:"column:external_url;type:varchar(500)"`
 	// Status 是菜单状态，1 表示启用，0 表示禁用。
 	Status *int `gorm:"column:status;not null;default:1;index"`
 	// Remark 是菜单备注。

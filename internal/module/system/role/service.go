@@ -8,20 +8,16 @@ import (
 
 	"fox-admin/internal/errcode"
 	"fox-admin/internal/module/system/entity"
+	"fox-admin/internal/module/system/enum"
+	"fox-admin/internal/observability/tracing"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
-const (
-	defaultDataScope = "all"
-	defaultSort      = 0
-	defaultStatus    = 1
-	defaultListPage  = 1
-	defaultListSize  = 20
-	maxListSize      = 200
-	batchSize        = 100
-)
+var tracer = otel.Tracer("fox-admin/internal/module/system/role")
 
 // Service 表示角色业务服务。
 type Service struct {
@@ -30,25 +26,127 @@ type Service struct {
 }
 
 // NewService 创建角色业务服务。
-func NewService(db *gorm.DB, logger *zap.Logger, tablePrefixes ...string) *Service {
+func NewService(db *gorm.DB, logger *zap.Logger) *Service {
 	if db == nil {
 		panic("role service db is nil")
 	}
 	if logger == nil {
 		panic("role service logger is nil")
 	}
-	_ = tablePrefixes
-
 	return &Service{
 		db:     db,
 		logger: logger,
 	}
 }
 
+// normalizeResourceIDs 校验并去重角色资源 ID。
+func normalizeResourceIDs(menuIDs, permissionIDs []int64) ([]int64, []int64, error) {
+	normalizedMenuIDs := make([]int64, 0, len(menuIDs))
+	menuSet := make(map[int64]struct{}, len(menuIDs))
+	for _, id := range menuIDs {
+		if id <= 0 {
+			return nil, nil, errcode.ErrRoleMenuIDInvalid
+		}
+		if _, ok := menuSet[id]; ok {
+			continue
+		}
+		menuSet[id] = struct{}{}
+		normalizedMenuIDs = append(normalizedMenuIDs, id)
+	}
+
+	normalizedPermissionIDs := make([]int64, 0, len(permissionIDs))
+	permissionSet := make(map[int64]struct{}, len(permissionIDs))
+	for _, id := range permissionIDs {
+		if id <= 0 {
+			return nil, nil, errcode.ErrRolePermissionIDInvalid
+		}
+		if _, ok := permissionSet[id]; ok {
+			continue
+		}
+		permissionSet[id] = struct{}{}
+		normalizedPermissionIDs = append(normalizedPermissionIDs, id)
+	}
+
+	return normalizedMenuIDs, normalizedPermissionIDs, nil
+}
+
+// validateResources 校验菜单、权限状态以及二者之间的归属关系。
+func (s *Service) validateResources(tx *gorm.DB, menuIDs, permissionIDs []int64) error {
+	menuSet := make(map[int64]struct{}, len(menuIDs))
+	if len(menuIDs) > 0 {
+		var menus []entity.Menu
+		if err := tx.Select("id, status").Where("id IN ?", menuIDs).Find(&menus).Error; err != nil {
+			return errcode.ErrRoleMenuQueryFailed.WithErr(err)
+		}
+		if len(menus) != len(menuIDs) {
+			return errcode.ErrRoleMenuNotFound
+		}
+		for i := range menus {
+			if menus[i].Status == nil || *menus[i].Status != 1 {
+				return errcode.ErrRoleMenuDisabled
+			}
+			menuSet[menus[i].ID] = struct{}{}
+		}
+	}
+
+	if len(permissionIDs) == 0 {
+		return nil
+	}
+
+	var permissions []entity.Permission
+	if err := tx.Select("id, menu_id, status").Where("id IN ?", permissionIDs).Find(&permissions).Error; err != nil {
+		return errcode.ErrRolePermissionQueryFailed.WithErr(err)
+	}
+	if len(permissions) != len(permissionIDs) {
+		return errcode.ErrRolePermissionNotFound
+	}
+	for i := range permissions {
+		permission := &permissions[i]
+		if permission.Status == nil || *permission.Status != 1 {
+			return errcode.ErrRolePermissionNotFound
+		}
+		if _, ok := menuSet[permission.MenuID]; !ok {
+			return errcode.ErrRolePermissionMenuRequired
+		}
+	}
+	return nil
+}
+
+// insertRoleResources 写入角色菜单和角色权限关联。
+func (s *Service) insertRoleResources(tx *gorm.DB, roleID int64, menuIDs, permissionIDs []int64) error {
+	if len(menuIDs) > 0 {
+		roleMenus := make([]entity.RoleMenu, 0, len(menuIDs))
+		for _, menuID := range menuIDs {
+			roleMenus = append(roleMenus, entity.RoleMenu{RoleID: roleID, MenuID: menuID})
+		}
+		if err := tx.Create(&roleMenus).Error; err != nil {
+			return err
+		}
+	}
+	if len(permissionIDs) > 0 {
+		rolePermissions := make([]entity.RolePermission, 0, len(permissionIDs))
+		for _, permissionID := range permissionIDs {
+			rolePermissions = append(rolePermissions, entity.RolePermission{RoleID: roleID, PermissionID: permissionID})
+		}
+		if err := tx.Create(&rolePermissions).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Create 创建角色。
-func (s *Service) Create(ctx context.Context, req *CreateReq) error {
+func (s *Service) Create(ctx context.Context, req *CreateReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.role.Create")
+	span.SetAttributes(
+		attribute.String("system.module", "role"),
+		attribute.String("system.operation", "create"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
-	roleMenuTable := entity.RoleMenu{}.TableName()
 	roleDeptTable := entity.RoleDept{}.TableName()
 
 	// 请求体为空时直接返回业务错误，避免后续字段访问触发 panic。
@@ -67,30 +165,28 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) error {
 	}
 
 	// 数据权限未传时默认全部数据；传入时必须属于系统支持的枚举范围。
-	dataScope := defaultDataScope
+	dataScope := enum.DataScopeAll
 	if req.DataScope != nil {
 		dataScope = strings.TrimSpace(*req.DataScope)
 		if dataScope == "" {
 			return errcode.ErrRoleDataScopeRequired
 		}
 	}
-	switch dataScope {
-	case "all", "dept", "dept_tree", "self", "custom":
-	default:
+	if !enum.IsDataScopeValid(dataScope) {
 		return errcode.ErrRoleDataScopeInvalid
 	}
 
 	// 排序和状态都有默认值；状态目前只接受 0 禁用、1 启用。
-	sortValue := defaultSort
+	sortValue := enum.DefaultSort
 	if req.Sort != nil {
 		if *req.Sort < 0 {
 			return errcode.ErrRoleSortInvalid
 		}
 		sortValue = *req.Sort
 	}
-	status := defaultStatus
+	status := enum.StatusEnabled
 	if req.Status != nil {
-		if *req.Status != 0 && *req.Status != 1 {
+		if !enum.IsStatusValid(*req.Status) {
 			return errcode.ErrRoleStatusRequired
 		}
 		status = *req.Status
@@ -106,24 +202,14 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) error {
 	}
 
 	// 菜单 ID 在入库前完成合法性校验和去重，后续只处理归一化后的集合。
-	menuIDs := make([]int64, 0, len(req.MenuIDs))
-	if len(req.MenuIDs) > 0 {
-		seen := make(map[int64]struct{}, len(req.MenuIDs))
-		for _, id := range req.MenuIDs {
-			if id <= 0 {
-				return errcode.ErrRoleMenuIDInvalid
-			}
-			if _, ok := seen[id]; ok {
-				continue
-			}
-			seen[id] = struct{}{}
-			menuIDs = append(menuIDs, id)
-		}
+	menuIDs, permissionIDs, err := normalizeResourceIDs(req.MenuIDs, req.PermissionIDs)
+	if err != nil {
+		return err
 	}
 
 	// 只有 custom 数据权限需要绑定部门；其他范围按固定规则计算，忽略传入部门集合。
 	deptIDs := make([]int64, 0, len(req.DeptIDs))
-	if dataScope == "custom" && len(req.DeptIDs) > 0 {
+	if dataScope == enum.DataScopeCustom && len(req.DeptIDs) > 0 {
 		seen := make(map[int64]struct{}, len(req.DeptIDs))
 		for _, id := range req.DeptIDs {
 			if id <= 0 {
@@ -136,6 +222,13 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) error {
 			deptIDs = append(deptIDs, id)
 		}
 	}
+	span.SetAttributes(
+		attribute.String("role.data_scope", dataScope),
+		attribute.Int("role.menu_count", len(menuIDs)),
+		attribute.Int("role.permission_count", len(permissionIDs)),
+		attribute.Int("role.dept_count", len(deptIDs)),
+		attribute.Int("role.status", status),
+	)
 
 	// 角色主表、菜单绑定、部门绑定必须在同一事务内写入，避免部分成功。
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -159,15 +252,9 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) error {
 		}
 
 		// 绑定菜单数量必须与去重后的菜单数量一致，否则说明存在无效菜单 ID。
-		if len(menuIDs) > 0 {
-			var menuCount int64
-			if err := tx.Model(&entity.Menu{}).Where("id IN ?", menuIDs).Count(&menuCount).Error; err != nil {
-				logger.Error("创建角色失败：查询菜单失败", zap.String("code", code), zap.Int64s("menu_ids", menuIDs), zap.Error(err))
-				return errcode.ErrRoleMenuQueryFailed.WithErr(err)
-			}
-			if menuCount != int64(len(menuIDs)) {
-				return errcode.ErrRoleMenuNotFound
-			}
+		if err := s.validateResources(tx, menuIDs, permissionIDs); err != nil {
+			logger.Warn("创建角色失败：角色资源校验未通过", zap.String("code", code), zap.Int64s("menu_ids", menuIDs), zap.Int64s("permission_ids", permissionIDs), zap.Error(err))
+			return err
 		}
 
 		// custom 数据权限的部门绑定必须全部真实存在，避免角色获得不可解释的数据范围。
@@ -197,15 +284,9 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) error {
 		}
 
 		// 写入角色菜单关联；menuIDs 已经提前校验和去重，这里只负责持久化。
-		if len(menuIDs) > 0 {
-			roleMenus := make([]entity.RoleMenu, 0, len(menuIDs))
-			for _, menuID := range menuIDs {
-				roleMenus = append(roleMenus, entity.RoleMenu{RoleID: role.ID, MenuID: menuID})
-			}
-			if err := tx.Table(roleMenuTable).Create(&roleMenus).Error; err != nil {
-				logger.Error("创建角色失败：写入角色菜单失败", zap.Int64("role_id", role.ID), zap.Int64s("menu_ids", menuIDs), zap.Error(err))
-				return errcode.ErrRoleCreateFailed.WithErr(err)
-			}
+		if err := s.insertRoleResources(tx, role.ID, menuIDs, permissionIDs); err != nil {
+			logger.Error("创建角色失败：写入角色资源失败", zap.Int64("role_id", role.ID), zap.Int64s("menu_ids", menuIDs), zap.Int64s("permission_ids", permissionIDs), zap.Error(err))
+			return errcode.ErrRoleCreateFailed.WithErr(err)
 		}
 
 		// 写入角色部门关联；只有 custom 数据权限会走到这里。
@@ -225,10 +306,20 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) error {
 }
 
 // Delete 删除角色。
-func (s *Service) Delete(ctx context.Context, req *DeleteReq) error {
+func (s *Service) Delete(ctx context.Context, req *DeleteReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.role.Delete")
+	span.SetAttributes(
+		attribute.String("system.module", "role"),
+		attribute.String("system.operation", "delete"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 	userRoleTable := entity.UserRole{}.TableName()
 	roleMenuTable := entity.RoleMenu{}.TableName()
+	rolePermissionTable := entity.RolePermission{}.TableName()
 	roleDeptTable := entity.RoleDept{}.TableName()
 
 	if req == nil || len(req.IDs) == 0 {
@@ -248,10 +339,11 @@ func (s *Service) Delete(ctx context.Context, req *DeleteReq) error {
 		seen[id] = struct{}{}
 		ids = append(ids, id)
 	}
+	span.SetAttributes(attribute.Int("role.batch_size", len(ids)))
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for start := 0; start < len(ids); start += batchSize {
-			end := start + batchSize
+		for start := 0; start < len(ids); start += enum.BatchSize {
+			end := start + enum.BatchSize
 			if end > len(ids) {
 				end = len(ids)
 			}
@@ -277,9 +369,13 @@ func (s *Service) Delete(ctx context.Context, req *DeleteReq) error {
 				return errcode.ErrRoleHasUserBinding
 			}
 
-			// 角色菜单和数据权限部门关联是普通关联表，需要先按 role_id 清理。
+			// 角色菜单、操作权限和数据权限部门关联需要先按 role_id 清理。
 			if err := tx.Table(roleMenuTable).Where("role_id IN ?", batchIDs).Delete(&entity.RoleMenu{}).Error; err != nil {
 				logger.Error("删除角色失败：删除角色菜单失败", zap.Int64s("role_ids", batchIDs), zap.Error(err))
+				return errcode.ErrRoleDeleteFailed.WithErr(err)
+			}
+			if err := tx.Table(rolePermissionTable).Where("role_id IN ?", batchIDs).Delete(&entity.RolePermission{}).Error; err != nil {
+				logger.Error("删除角色失败：删除角色权限失败", zap.Int64s("role_ids", batchIDs), zap.Error(err))
 				return errcode.ErrRoleDeleteFailed.WithErr(err)
 			}
 			if err := tx.Table(roleDeptTable).Where("role_id IN ?", batchIDs).Delete(&entity.RoleDept{}).Error; err != nil {
@@ -298,9 +394,19 @@ func (s *Service) Delete(ctx context.Context, req *DeleteReq) error {
 }
 
 // Update 更新角色。
-func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
+func (s *Service) Update(ctx context.Context, req *UpdateReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.role.Update")
+	span.SetAttributes(
+		attribute.String("system.module", "role"),
+		attribute.String("system.operation", "update"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 	roleMenuTable := entity.RoleMenu{}.TableName()
+	rolePermissionTable := entity.RolePermission{}.TableName()
 	roleDeptTable := entity.RoleDept{}.TableName()
 
 	if req == nil {
@@ -309,6 +415,7 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
 	if req.ID <= 0 {
 		return errcode.ErrRoleIDInvalid
 	}
+	span.SetAttributes(attribute.Int64("role.id", req.ID))
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -319,29 +426,27 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
 		return errcode.ErrRoleCodeRequired
 	}
 
-	dataScope := defaultDataScope
+	dataScope := enum.DataScopeAll
 	if req.DataScope != nil {
 		dataScope = strings.TrimSpace(*req.DataScope)
 		if dataScope == "" {
 			return errcode.ErrRoleDataScopeRequired
 		}
 	}
-	switch dataScope {
-	case "all", "dept", "dept_tree", "self", "custom":
-	default:
+	if !enum.IsDataScopeValid(dataScope) {
 		return errcode.ErrRoleDataScopeInvalid
 	}
 
-	sortValue := defaultSort
+	sortValue := enum.DefaultSort
 	if req.Sort != nil {
 		if *req.Sort < 0 {
 			return errcode.ErrRoleSortInvalid
 		}
 		sortValue = *req.Sort
 	}
-	status := defaultStatus
+	status := enum.StatusEnabled
 	if req.Status != nil {
-		if *req.Status != 0 && *req.Status != 1 {
+		if !enum.IsStatusValid(*req.Status) {
 			return errcode.ErrRoleStatusRequired
 		}
 		status = *req.Status
@@ -355,23 +460,13 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
 		}
 	}
 
-	menuIDs := make([]int64, 0, len(req.MenuIDs))
-	if len(req.MenuIDs) > 0 {
-		seen := make(map[int64]struct{}, len(req.MenuIDs))
-		for _, id := range req.MenuIDs {
-			if id <= 0 {
-				return errcode.ErrRoleMenuIDInvalid
-			}
-			if _, ok := seen[id]; ok {
-				continue
-			}
-			seen[id] = struct{}{}
-			menuIDs = append(menuIDs, id)
-		}
+	menuIDs, permissionIDs, err := normalizeResourceIDs(req.MenuIDs, req.PermissionIDs)
+	if err != nil {
+		return err
 	}
 
 	deptIDs := make([]int64, 0, len(req.DeptIDs))
-	if dataScope == "custom" && len(req.DeptIDs) > 0 {
+	if dataScope == enum.DataScopeCustom && len(req.DeptIDs) > 0 {
 		seen := make(map[int64]struct{}, len(req.DeptIDs))
 		for _, id := range req.DeptIDs {
 			if id <= 0 {
@@ -384,6 +479,13 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
 			deptIDs = append(deptIDs, id)
 		}
 	}
+	span.SetAttributes(
+		attribute.String("role.data_scope", dataScope),
+		attribute.Int("role.menu_count", len(menuIDs)),
+		attribute.Int("role.permission_count", len(permissionIDs)),
+		attribute.Int("role.dept_count", len(deptIDs)),
+		attribute.Int("role.status", status),
+	)
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var roleCount int64
@@ -413,15 +515,9 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
 			return errcode.ErrRoleCodeExists
 		}
 
-		if len(menuIDs) > 0 {
-			var menuCount int64
-			if err := tx.Model(&entity.Menu{}).Where("id IN ?", menuIDs).Count(&menuCount).Error; err != nil {
-				logger.Error("更新角色失败：查询菜单失败", zap.Int64("role_id", req.ID), zap.Int64s("menu_ids", menuIDs), zap.Error(err))
-				return errcode.ErrRoleMenuQueryFailed.WithErr(err)
-			}
-			if menuCount != int64(len(menuIDs)) {
-				return errcode.ErrRoleMenuNotFound
-			}
+		if err := s.validateResources(tx, menuIDs, permissionIDs); err != nil {
+			logger.Warn("更新角色失败：角色资源校验未通过", zap.Int64("role_id", req.ID), zap.Int64s("menu_ids", menuIDs), zap.Int64s("permission_ids", permissionIDs), zap.Error(err))
+			return err
 		}
 
 		if len(deptIDs) > 0 {
@@ -453,15 +549,13 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
 			logger.Error("更新角色失败：删除角色菜单失败", zap.Int64("role_id", req.ID), zap.Error(err))
 			return errcode.ErrRoleUpdateFailed.WithErr(err)
 		}
-		if len(menuIDs) > 0 {
-			roleMenus := make([]entity.RoleMenu, 0, len(menuIDs))
-			for _, menuID := range menuIDs {
-				roleMenus = append(roleMenus, entity.RoleMenu{RoleID: req.ID, MenuID: menuID})
-			}
-			if err := tx.Table(roleMenuTable).Create(&roleMenus).Error; err != nil {
-				logger.Error("更新角色失败：写入角色菜单失败", zap.Int64("role_id", req.ID), zap.Int64s("menu_ids", menuIDs), zap.Error(err))
-				return errcode.ErrRoleUpdateFailed.WithErr(err)
-			}
+		if err := tx.Table(rolePermissionTable).Where("role_id = ?", req.ID).Delete(&entity.RolePermission{}).Error; err != nil {
+			logger.Error("更新角色失败：删除角色权限失败", zap.Int64("role_id", req.ID), zap.Error(err))
+			return errcode.ErrRoleUpdateFailed.WithErr(err)
+		}
+		if err := s.insertRoleResources(tx, req.ID, menuIDs, permissionIDs); err != nil {
+			logger.Error("更新角色失败：写入角色资源失败", zap.Int64("role_id", req.ID), zap.Int64s("menu_ids", menuIDs), zap.Int64s("permission_ids", permissionIDs), zap.Error(err))
+			return errcode.ErrRoleUpdateFailed.WithErr(err)
 		}
 
 		if err := tx.Table(roleDeptTable).Where("role_id = ?", req.ID).Delete(&entity.RoleDept{}).Error; err != nil {
@@ -484,11 +578,20 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
 }
 
 // List 查询角色列表。
-func (s *Service) List(ctx context.Context, req *ListReq) (*ListResp, error) {
+func (s *Service) List(ctx context.Context, req *ListReq) (resp *ListResp, err error) {
+	ctx, span := tracer.Start(ctx, "system.role.List")
+	span.SetAttributes(
+		attribute.String("system.module", "role"),
+		attribute.String("system.operation", "list"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 
-	page := defaultListPage
-	size := defaultListSize
+	page := enum.DefaultPage
+	size := enum.DefaultSize
 	var name string
 	var code string
 	var status *int
@@ -503,9 +606,16 @@ func (s *Service) List(ctx context.Context, req *ListReq) (*ListResp, error) {
 		code = strings.TrimSpace(req.Code)
 		status = req.Status
 	}
-	if size > maxListSize {
-		size = maxListSize
+	if size > enum.MaxSize {
+		size = enum.MaxSize
 	}
+	span.SetAttributes(
+		attribute.Int("role.page", page),
+		attribute.Int("role.size", size),
+		attribute.Bool("role.filter_name", name != ""),
+		attribute.Bool("role.filter_code", code != ""),
+		attribute.Bool("role.filter_status", status != nil),
+	)
 
 	query := s.db.WithContext(ctx).Table(entity.Role{}.TableName()+" AS r").Where("r.deleted_at = ?", 0)
 	if name != "" {
@@ -539,7 +649,16 @@ func (s *Service) List(ctx context.Context, req *ListReq) (*ListResp, error) {
 }
 
 // Options 查询角色选项。
-func (s *Service) Options(ctx context.Context) (*OptionsResp, error) {
+func (s *Service) Options(ctx context.Context) (resp *OptionsResp, err error) {
+	ctx, span := tracer.Start(ctx, "system.role.Options")
+	span.SetAttributes(
+		attribute.String("system.module", "role"),
+		attribute.String("system.operation", "options"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 
 	var items []*OptionItemResp
@@ -552,12 +671,22 @@ func (s *Service) Options(ctx context.Context) (*OptionsResp, error) {
 		logger.Error("查询角色选项失败：查询角色失败", zap.Error(err))
 		return nil, errcode.ErrRoleListQueryFailed.WithErr(err)
 	}
+	span.SetAttributes(attribute.Int("role.count", len(items)))
 
 	return &OptionsResp{List: items}, nil
 }
 
 // Detail 查询角色详情。
-func (s *Service) Detail(ctx context.Context, req *DetailReq) (*DetailResp, error) {
+func (s *Service) Detail(ctx context.Context, req *DetailReq) (resp *DetailResp, err error) {
+	ctx, span := tracer.Start(ctx, "system.role.Detail")
+	span.SetAttributes(
+		attribute.String("system.module", "role"),
+		attribute.String("system.operation", "detail"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 
 	if req == nil {
@@ -566,10 +695,13 @@ func (s *Service) Detail(ctx context.Context, req *DetailReq) (*DetailResp, erro
 	if req.ID <= 0 {
 		return nil, errcode.ErrRoleIDInvalid
 	}
+	span.SetAttributes(attribute.Int64("role.id", req.ID))
 
 	roleMenuTable := entity.RoleMenu{}.TableName()
+	rolePermissionTable := entity.RolePermission{}.TableName()
 	roleDeptTable := entity.RoleDept{}.TableName()
 	menuTable := entity.Menu{}.TableName()
+	permissionTable := entity.Permission{}.TableName()
 	deptTable := entity.Dept{}.TableName()
 
 	var row DetailResp
@@ -601,6 +733,22 @@ func (s *Service) Detail(ctx context.Context, req *DetailReq) (*DetailResp, erro
 		menuIDs = append(menuIDs, menu.ID)
 	}
 
+	var permissions []*PermissionInfoResp
+	if err := s.db.WithContext(ctx).
+		Table(rolePermissionTable+" AS rp").
+		Select("p.id, p.menu_id, p.name, p.code").
+		Joins("INNER JOIN "+permissionTable+" AS p ON p.id = rp.permission_id AND p.deleted_at = ?", 0).
+		Where("rp.role_id = ?", req.ID).
+		Order("p.id ASC").
+		Find(&permissions).Error; err != nil {
+		logger.Error("查询角色详情失败：查询角色权限失败", zap.Int64("role_id", req.ID), zap.Error(err))
+		return nil, errcode.ErrRolePermissionQueryFailed.WithErr(err)
+	}
+	permissionIDs := make([]int64, 0, len(permissions))
+	for _, permission := range permissions {
+		permissionIDs = append(permissionIDs, permission.ID)
+	}
+
 	var depts []*DeptInfoResp
 	if err := s.db.WithContext(ctx).
 		Table(roleDeptTable+" AS rd").
@@ -619,13 +767,29 @@ func (s *Service) Detail(ctx context.Context, req *DetailReq) (*DetailResp, erro
 
 	row.MenuIDs = menuIDs
 	row.Menus = menus
+	row.PermissionIDs = permissionIDs
+	row.Permissions = permissions
 	row.DeptIDs = deptIDs
 	row.Depts = depts
+	span.SetAttributes(
+		attribute.Int("role.menu_count", len(menuIDs)),
+		attribute.Int("role.permission_count", len(permissionIDs)),
+		attribute.Int("role.dept_count", len(deptIDs)),
+	)
 	return &row, nil
 }
 
 // UpdateStatus 更新角色状态。
-func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) error {
+func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.role.UpdateStatus")
+	span.SetAttributes(
+		attribute.String("system.module", "role"),
+		attribute.String("system.operation", "update_status"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 
 	if req == nil {
@@ -634,7 +798,7 @@ func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) error 
 	if len(req.IDs) == 0 {
 		return errcode.ErrRoleIDsRequired
 	}
-	if req.Status == nil || (*req.Status != 0 && *req.Status != 1) {
+	if req.Status == nil || !enum.IsStatusValid(*req.Status) {
 		return errcode.ErrRoleStatusRequired
 	}
 
@@ -650,10 +814,14 @@ func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) error 
 		seen[id] = struct{}{}
 		ids = append(ids, id)
 	}
+	span.SetAttributes(
+		attribute.Int("role.batch_size", len(ids)),
+		attribute.Int("role.status", *req.Status),
+	)
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for start := 0; start < len(ids); start += batchSize {
-			end := start + batchSize
+		for start := 0; start < len(ids); start += enum.BatchSize {
+			end := start + enum.BatchSize
 			if end > len(ids) {
 				end = len(ids)
 			}
@@ -681,76 +849,80 @@ func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) error 
 	})
 }
 
-// AssignMenus 分配角色菜单。
-func (s *Service) AssignMenus(ctx context.Context, req *AssignMenusReq) error {
+// AssignResources 分配角色菜单和操作权限。
+func (s *Service) AssignResources(ctx context.Context, req *AssignResourcesReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.role.AssignResources")
+	span.SetAttributes(
+		attribute.String("system.module", "role"),
+		attribute.String("system.operation", "assign_resources"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 	roleMenuTable := entity.RoleMenu{}.TableName()
+	rolePermissionTable := entity.RolePermission{}.TableName()
 
 	if req == nil {
-		return errcode.ErrRoleAssignMenusReqNil
+		return errcode.ErrRoleAssignResourcesReqNil
 	}
 	if req.ID <= 0 {
 		return errcode.ErrRoleIDInvalid
 	}
+	span.SetAttributes(attribute.Int64("role.id", req.ID))
 
-	menuIDs := make([]int64, 0, len(req.MenuIDs))
-	if len(req.MenuIDs) > 0 {
-		seen := make(map[int64]struct{}, len(req.MenuIDs))
-		for _, id := range req.MenuIDs {
-			if id <= 0 {
-				return errcode.ErrRoleMenuIDInvalid
-			}
-			if _, ok := seen[id]; ok {
-				continue
-			}
-			seen[id] = struct{}{}
-			menuIDs = append(menuIDs, id)
-		}
+	menuIDs, permissionIDs, err := normalizeResourceIDs(req.MenuIDs, req.PermissionIDs)
+	if err != nil {
+		return err
 	}
+	span.SetAttributes(
+		attribute.Int("role.menu_count", len(menuIDs)),
+		attribute.Int("role.permission_count", len(permissionIDs)),
+	)
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var roleCount int64
 		if err := tx.Model(&entity.Role{}).Where("id = ?", req.ID).Count(&roleCount).Error; err != nil {
-			logger.Error("分配角色菜单失败：查询角色失败", zap.Int64("role_id", req.ID), zap.Error(err))
+			logger.Error("分配角色资源失败：查询角色失败", zap.Int64("role_id", req.ID), zap.Error(err))
 			return errcode.ErrRoleQueryFailed.WithErr(err)
 		}
 		if roleCount == 0 {
 			return errcode.ErrRoleNotFound
 		}
 
-		if len(menuIDs) > 0 {
-			var menuCount int64
-			if err := tx.Model(&entity.Menu{}).Where("id IN ?", menuIDs).Count(&menuCount).Error; err != nil {
-				logger.Error("分配角色菜单失败：查询菜单失败", zap.Int64("role_id", req.ID), zap.Int64s("menu_ids", menuIDs), zap.Error(err))
-				return errcode.ErrRoleMenuQueryFailed.WithErr(err)
-			}
-			if menuCount != int64(len(menuIDs)) {
-				return errcode.ErrRoleMenuNotFound
-			}
+		if err := s.validateResources(tx, menuIDs, permissionIDs); err != nil {
+			logger.Warn("分配角色资源失败：资源校验未通过", zap.Int64("role_id", req.ID), zap.Int64s("menu_ids", menuIDs), zap.Int64s("permission_ids", permissionIDs), zap.Error(err))
+			return err
 		}
 
 		if err := tx.Table(roleMenuTable).Where("role_id = ?", req.ID).Delete(&entity.RoleMenu{}).Error; err != nil {
-			logger.Error("分配角色菜单失败：删除角色菜单失败", zap.Int64("role_id", req.ID), zap.Error(err))
-			return errcode.ErrRoleAssignMenusFailed.WithErr(err)
+			logger.Error("分配角色资源失败：删除角色菜单失败", zap.Int64("role_id", req.ID), zap.Error(err))
+			return errcode.ErrRoleAssignResourcesFailed.WithErr(err)
 		}
-		if len(menuIDs) == 0 {
-			return nil
+		if err := tx.Table(rolePermissionTable).Where("role_id = ?", req.ID).Delete(&entity.RolePermission{}).Error; err != nil {
+			logger.Error("分配角色资源失败：删除角色权限失败", zap.Int64("role_id", req.ID), zap.Error(err))
+			return errcode.ErrRoleAssignResourcesFailed.WithErr(err)
 		}
-
-		roleMenus := make([]entity.RoleMenu, 0, len(menuIDs))
-		for _, menuID := range menuIDs {
-			roleMenus = append(roleMenus, entity.RoleMenu{RoleID: req.ID, MenuID: menuID})
-		}
-		if err := tx.Table(roleMenuTable).Create(&roleMenus).Error; err != nil {
-			logger.Error("分配角色菜单失败：写入角色菜单失败", zap.Int64("role_id", req.ID), zap.Int64s("menu_ids", menuIDs), zap.Error(err))
-			return errcode.ErrRoleAssignMenusFailed.WithErr(err)
+		if err := s.insertRoleResources(tx, req.ID, menuIDs, permissionIDs); err != nil {
+			logger.Error("分配角色资源失败：写入角色资源失败", zap.Int64("role_id", req.ID), zap.Int64s("menu_ids", menuIDs), zap.Int64s("permission_ids", permissionIDs), zap.Error(err))
+			return errcode.ErrRoleAssignResourcesFailed.WithErr(err)
 		}
 		return nil
 	})
 }
 
 // AssignDepts 分配角色数据权限部门。
-func (s *Service) AssignDepts(ctx context.Context, req *AssignDeptsReq) error {
+func (s *Service) AssignDepts(ctx context.Context, req *AssignDeptsReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.role.AssignDepts")
+	span.SetAttributes(
+		attribute.String("system.module", "role"),
+		attribute.String("system.operation", "assign_depts"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 
 	if req == nil {
@@ -759,21 +931,20 @@ func (s *Service) AssignDepts(ctx context.Context, req *AssignDeptsReq) error {
 	if req.ID <= 0 {
 		return errcode.ErrRoleIDInvalid
 	}
+	span.SetAttributes(attribute.Int64("role.id", req.ID))
 
 	// 数据权限范围必须显式传入，避免误用默认值扩大角色的数据访问范围。
 	dataScope := strings.TrimSpace(req.DataScope)
 	if dataScope == "" {
 		return errcode.ErrRoleDataScopeRequired
 	}
-	switch dataScope {
-	case "all", "dept", "dept_tree", "self", "custom":
-	default:
+	if !enum.IsDataScopeValid(dataScope) {
 		return errcode.ErrRoleDataScopeInvalid
 	}
 
 	// 只有自定义数据权限需要持久化部门集合，其他范围由固定规则计算并清空旧绑定。
 	deptIDs := make([]int64, 0, len(req.DeptIDs))
-	if dataScope == "custom" {
+	if dataScope == enum.DataScopeCustom {
 		seen := make(map[int64]struct{}, len(req.DeptIDs))
 		for _, id := range req.DeptIDs {
 			if id <= 0 {
@@ -786,6 +957,10 @@ func (s *Service) AssignDepts(ctx context.Context, req *AssignDeptsReq) error {
 			deptIDs = append(deptIDs, id)
 		}
 	}
+	span.SetAttributes(
+		attribute.String("role.data_scope", dataScope),
+		attribute.Int("role.dept_count", len(deptIDs)),
+	)
 
 	// 数据权限范围和部门绑定必须同步生效，任一步失败都回滚整个操作。
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

@@ -8,20 +8,19 @@ import (
 
 	"fox-admin/internal/errcode"
 	"fox-admin/internal/module/system/entity"
+	"fox-admin/internal/module/system/enum"
+	"fox-admin/internal/observability/tracing"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
-const (
-	defaultStatus   = 1
-	defaultGender   = 0
-	defaultListPage = 1
-	defaultListSize = 20
-	maxListSize     = 200
-	batchSize       = 100
-)
+const defaultGender = 0
+
+var tracer = otel.Tracer("fox-admin/internal/module/system/user")
 
 // Service 表示用户业务服务。
 type Service struct {
@@ -30,15 +29,13 @@ type Service struct {
 }
 
 // NewService 创建用户业务服务。
-func NewService(db *gorm.DB, logger *zap.Logger, tablePrefixes ...string) *Service {
+func NewService(db *gorm.DB, logger *zap.Logger) *Service {
 	if db == nil {
 		panic("user service db is nil")
 	}
 	if logger == nil {
 		panic("user service logger is nil")
 	}
-	_ = tablePrefixes
-
 	return &Service{
 		db:     db,
 		logger: logger,
@@ -46,7 +43,16 @@ func NewService(db *gorm.DB, logger *zap.Logger, tablePrefixes ...string) *Servi
 }
 
 // Create 创建用户。
-func (s *Service) Create(ctx context.Context, req *CreateReq) error {
+func (s *Service) Create(ctx context.Context, req *CreateReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.user.Create")
+	span.SetAttributes(
+		attribute.String("system.module", "user"),
+		attribute.String("system.operation", "create"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 	userRoleTable := entity.UserRole{}.TableName()
 	userPostTable := entity.UserPost{}.TableName()
@@ -71,11 +77,11 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) error {
 	if req.Gender != nil && (*req.Gender < 0 || *req.Gender > 2) {
 		return errcode.ErrUserGenderInvalid
 	}
-	if req.Status != nil && (*req.Status != 0 && *req.Status != 1) {
+	if req.Status != nil && !enum.IsStatusValid(*req.Status) {
 		return errcode.ErrUserStatusRequired
 	}
 	// 状态和性别都有业务默认值：未传 status 时启用，未传 gender 时未知。
-	status := defaultStatus
+	status := enum.StatusEnabled
 	if req.Status != nil {
 		status = *req.Status
 	}
@@ -152,6 +158,11 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) error {
 			postIDs = append(postIDs, id)
 		}
 	}
+	span.SetAttributes(
+		attribute.Bool("user.has_dept", req.DeptID != nil),
+		attribute.Int("user.role_count", len(roleIDs)),
+		attribute.Int("user.post_count", len(postIDs)),
+	)
 
 	// 密码只保存 bcrypt 摘要，不把明文密码传入实体或日志。
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -283,7 +294,16 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) error {
 }
 
 // Delete 删除用户。
-func (s *Service) Delete(ctx context.Context, req *DeleteReq) error {
+func (s *Service) Delete(ctx context.Context, req *DeleteReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.user.Delete")
+	span.SetAttributes(
+		attribute.String("system.module", "user"),
+		attribute.String("system.operation", "delete"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 	userRoleTable := entity.UserRole{}.TableName()
 	userPostTable := entity.UserPost{}.TableName()
@@ -305,10 +325,11 @@ func (s *Service) Delete(ctx context.Context, req *DeleteReq) error {
 		seen[id] = struct{}{}
 		ids = append(ids, id)
 	}
+	span.SetAttributes(attribute.Int("user.batch_size", len(ids)))
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for start := 0; start < len(ids); start += batchSize {
-			end := start + batchSize
+		for start := 0; start < len(ids); start += enum.BatchSize {
+			end := start + enum.BatchSize
 			if end > len(ids) {
 				end = len(ids)
 			}
@@ -345,7 +366,16 @@ func (s *Service) Delete(ctx context.Context, req *DeleteReq) error {
 }
 
 // Update 更新用户。
-func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
+func (s *Service) Update(ctx context.Context, req *UpdateReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.user.Update")
+	span.SetAttributes(
+		attribute.String("system.module", "user"),
+		attribute.String("system.operation", "update"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 	userRoleTable := entity.UserRole{}.TableName()
 	userPostTable := entity.UserPost{}.TableName()
@@ -356,6 +386,7 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
 	if req.ID <= 0 {
 		return errcode.ErrUserIDInvalid
 	}
+	span.SetAttributes(attribute.Int64("user.id", req.ID))
 
 	// 更新用户需要保留账号的必填语义，并在事务前完成基础字段校验。
 	username := strings.TrimSpace(req.Username)
@@ -368,7 +399,7 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
 	if req.Gender != nil && (*req.Gender < 0 || *req.Gender > 2) {
 		return errcode.ErrUserGenderInvalid
 	}
-	if req.Status != nil && (*req.Status != 0 && *req.Status != 1) {
+	if req.Status != nil && !enum.IsStatusValid(*req.Status) {
 		return errcode.ErrUserStatusRequired
 	}
 
@@ -445,6 +476,11 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
 			postIDs = append(postIDs, id)
 		}
 	}
+	span.SetAttributes(
+		attribute.Bool("user.has_dept", req.DeptID != nil),
+		attribute.Int("user.role_count", len(roleIDs)),
+		attribute.Int("user.post_count", len(postIDs)),
+	)
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// 先确认用户存在，避免后续唯一性检查返回与真实问题不一致的错误。
@@ -582,7 +618,16 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) error {
 }
 
 // List 查询用户列表。
-func (s *Service) List(ctx context.Context, req *ListReq) (*ListResp, error) {
+func (s *Service) List(ctx context.Context, req *ListReq) (resp *ListResp, err error) {
+	ctx, span := tracer.Start(ctx, "system.user.List")
+	span.SetAttributes(
+		attribute.String("system.module", "user"),
+		attribute.String("system.operation", "list"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 	deptTable := entity.Dept{}.TableName()
 	type listRow struct {
@@ -601,8 +646,8 @@ func (s *Service) List(ctx context.Context, req *ListReq) (*ListResp, error) {
 		UpdatedAt time.Time `gorm:"column:updated_at"`
 	}
 
-	page := defaultListPage
-	size := defaultListSize
+	page := enum.DefaultPage
+	size := enum.DefaultSize
 	var username string
 	var status *int
 	var deptID *int64
@@ -630,9 +675,17 @@ func (s *Service) List(ctx context.Context, req *ListReq) (*ListResp, error) {
 			gender = req.Gender
 		}
 	}
-	if size > maxListSize {
-		size = maxListSize
+	if size > enum.MaxSize {
+		size = enum.MaxSize
 	}
+	span.SetAttributes(
+		attribute.Int("user.page", page),
+		attribute.Int("user.size", size),
+		attribute.Bool("user.filter_username", username != ""),
+		attribute.Bool("user.filter_status", status != nil),
+		attribute.Bool("user.filter_dept", deptID != nil),
+		attribute.Bool("user.filter_gender", gender != nil),
+	)
 
 	query := s.db.WithContext(ctx).Table(entity.User{}.TableName()+" AS u").Where("u.deleted_at = ?", 0)
 	if username != "" {
@@ -693,7 +746,16 @@ func (s *Service) List(ctx context.Context, req *ListReq) (*ListResp, error) {
 }
 
 // Detail 查询用户详情。
-func (s *Service) Detail(ctx context.Context, req *DetailReq) (*DetailResp, error) {
+func (s *Service) Detail(ctx context.Context, req *DetailReq) (resp *DetailResp, err error) {
+	ctx, span := tracer.Start(ctx, "system.user.Detail")
+	span.SetAttributes(
+		attribute.String("system.module", "user"),
+		attribute.String("system.operation", "detail"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 	deptTable := entity.Dept{}.TableName()
 	roleTable := entity.Role{}.TableName()
@@ -722,6 +784,7 @@ func (s *Service) Detail(ctx context.Context, req *DetailReq) (*DetailResp, erro
 	if req.ID <= 0 {
 		return nil, errcode.ErrUserIDInvalid
 	}
+	span.SetAttributes(attribute.Int64("user.id", req.ID))
 
 	var row detailRow
 	if err := s.db.WithContext(ctx).
@@ -791,7 +854,16 @@ func (s *Service) Detail(ctx context.Context, req *DetailReq) (*DetailResp, erro
 }
 
 // UpdateStatus 更新用户状态。
-func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) error {
+func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.user.UpdateStatus")
+	span.SetAttributes(
+		attribute.String("system.module", "user"),
+		attribute.String("system.operation", "update_status"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 
 	if req == nil {
@@ -800,7 +872,7 @@ func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) error 
 	if len(req.IDs) == 0 {
 		return errcode.ErrUserIDsRequired
 	}
-	if req.Status == nil || (*req.Status != 0 && *req.Status != 1) {
+	if req.Status == nil || !enum.IsStatusValid(*req.Status) {
 		return errcode.ErrUserStatusRequired
 	}
 
@@ -816,10 +888,14 @@ func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) error 
 		seen[id] = struct{}{}
 		ids = append(ids, id)
 	}
+	span.SetAttributes(
+		attribute.Int("user.batch_size", len(ids)),
+		attribute.Int("user.status", *req.Status),
+	)
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for start := 0; start < len(ids); start += batchSize {
-			end := start + batchSize
+		for start := 0; start < len(ids); start += enum.BatchSize {
+			end := start + enum.BatchSize
 			if end > len(ids) {
 				end = len(ids)
 			}
@@ -844,7 +920,16 @@ func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) error 
 }
 
 // ResetPassword 重置用户密码。
-func (s *Service) ResetPassword(ctx context.Context, req *ResetPasswordReq) error {
+func (s *Service) ResetPassword(ctx context.Context, req *ResetPasswordReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.user.ResetPassword")
+	span.SetAttributes(
+		attribute.String("system.module", "user"),
+		attribute.String("system.operation", "reset_password"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 
 	if req == nil {
@@ -853,6 +938,7 @@ func (s *Service) ResetPassword(ctx context.Context, req *ResetPasswordReq) erro
 	if req.ID <= 0 {
 		return errcode.ErrUserIDInvalid
 	}
+	span.SetAttributes(attribute.Int64("user.id", req.ID))
 	password := strings.TrimSpace(req.Password)
 	if password == "" {
 		return errcode.ErrUserPasswordRequired
@@ -883,7 +969,16 @@ func (s *Service) ResetPassword(ctx context.Context, req *ResetPasswordReq) erro
 }
 
 // AssignRoles 分配用户角色。
-func (s *Service) AssignRoles(ctx context.Context, req *AssignRolesReq) error {
+func (s *Service) AssignRoles(ctx context.Context, req *AssignRolesReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.user.AssignRoles")
+	span.SetAttributes(
+		attribute.String("system.module", "user"),
+		attribute.String("system.operation", "assign_roles"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
 	logger := s.logger
 	userRoleTable := entity.UserRole{}.TableName()
 
@@ -893,6 +988,7 @@ func (s *Service) AssignRoles(ctx context.Context, req *AssignRolesReq) error {
 	if req.ID <= 0 {
 		return errcode.ErrUserIDInvalid
 	}
+	span.SetAttributes(attribute.Int64("user.id", req.ID))
 
 	roleIDs := make([]int64, 0, len(req.RoleIDs))
 	if len(req.RoleIDs) > 0 {
@@ -908,6 +1004,7 @@ func (s *Service) AssignRoles(ctx context.Context, req *AssignRolesReq) error {
 			roleIDs = append(roleIDs, id)
 		}
 	}
+	span.SetAttributes(attribute.Int("user.role_count", len(roleIDs)))
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var userCount int64

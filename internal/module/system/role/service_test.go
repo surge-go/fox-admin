@@ -9,6 +9,7 @@ import (
 
 	"fox-admin/internal/errcode"
 	"fox-admin/internal/module/system/entity"
+	"fox-admin/internal/module/system/enum"
 
 	foxerrors "github.com/surge-go/fox/core/errors"
 	"go.uber.org/zap"
@@ -20,6 +21,7 @@ import (
 func TestServiceCreateSavesRoleAndBindings(t *testing.T) {
 	service := newTestService(t)
 	menu := createTestMenu(t, service.db, "system:user")
+	permission := createTestPermission(t, service.db, menu.ID, "system:user:create")
 	dept := createTestDept(t, service.db, "研发部")
 	dataScope := " custom "
 	sortValue := 3
@@ -27,14 +29,15 @@ func TestServiceCreateSavesRoleAndBindings(t *testing.T) {
 	remark := " 系统管理员 "
 
 	if err := service.Create(context.Background(), &CreateReq{
-		Name:      " 管理员 ",
-		Code:      " admin ",
-		DataScope: &dataScope,
-		MenuIDs:   []int64{menu.ID, menu.ID},
-		DeptIDs:   []int64{dept.ID, dept.ID},
-		Sort:      &sortValue,
-		Status:    &status,
-		Remark:    &remark,
+		Name:          " 管理员 ",
+		Code:          " admin ",
+		DataScope:     &dataScope,
+		MenuIDs:       []int64{menu.ID, menu.ID},
+		PermissionIDs: []int64{permission.ID, permission.ID},
+		DeptIDs:       []int64{dept.ID, dept.ID},
+		Sort:          &sortValue,
+		Status:        &status,
+		Remark:        &remark,
 	}); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -53,6 +56,13 @@ func TestServiceCreateSavesRoleAndBindings(t *testing.T) {
 	}
 	if !reflect.DeepEqual(menuIDs, []int64{menu.ID}) {
 		t.Fatalf("menuIDs = %#v, want [%d]", menuIDs, menu.ID)
+	}
+	var permissionIDs []int64
+	if err := service.db.Model(&entity.RolePermission{}).Where("role_id = ?", role.ID).Pluck("permission_id", &permissionIDs).Error; err != nil {
+		t.Fatalf("query role permissions: %v", err)
+	}
+	if !reflect.DeepEqual(permissionIDs, []int64{permission.ID}) {
+		t.Fatalf("permissionIDs = %#v, want [%d]", permissionIDs, permission.ID)
 	}
 
 	var deptIDs []int64
@@ -75,7 +85,7 @@ func TestServiceCreateUsesDefaults(t *testing.T) {
 	if err := service.db.Where("code = ?", "admin").First(&role).Error; err != nil {
 		t.Fatalf("query role: %v", err)
 	}
-	if role.DataScope == nil || *role.DataScope != defaultDataScope || role.Sort == nil || *role.Sort != defaultSort || role.Status == nil || *role.Status != defaultStatus {
+	if role.DataScope == nil || *role.DataScope != enum.DataScopeAll || role.Sort == nil || *role.Sort != enum.DefaultSort || role.Status == nil || *role.Status != enum.StatusEnabled {
 		t.Fatalf("role defaults dataScope:%v sort:%v status:%v", role.DataScope, role.Sort, role.Status)
 	}
 }
@@ -114,8 +124,8 @@ func TestServiceUsesTablePrefixForWrites(t *testing.T) {
 	if err := service.UpdateStatus(context.Background(), &UpdateStatusReq{IDs: []int64{role.ID}, Status: &status}); err != nil {
 		t.Fatalf("UpdateStatus() with table prefix error = %v", err)
 	}
-	if err := service.AssignMenus(context.Background(), &AssignMenusReq{ID: role.ID, MenuIDs: []int64{menuB.ID}}); err != nil {
-		t.Fatalf("AssignMenus() with table prefix error = %v", err)
+	if err := service.AssignResources(context.Background(), &AssignResourcesReq{ID: role.ID, MenuIDs: []int64{menuB.ID}}); err != nil {
+		t.Fatalf("AssignResources() with table prefix error = %v", err)
 	}
 	if err := service.AssignDepts(context.Background(), &AssignDeptsReq{ID: role.ID, DataScope: "custom", DeptIDs: []int64{dept.ID}}); err != nil {
 		t.Fatalf("AssignDepts() with table prefix error = %v", err)
@@ -209,11 +219,15 @@ func TestServiceCreateRejectsDuplicateAndMissingRelations(t *testing.T) {
 func TestServiceDeleteRemovesBindingsAndSoftDeletesRoles(t *testing.T) {
 	service := newTestService(t)
 	menu := createTestMenu(t, service.db, "system:user")
+	permission := createTestPermission(t, service.db, menu.ID, "system:user:create")
 	dept := createTestDept(t, service.db, "研发部")
 	roleA := createTestRole(t, service.db, "管理员", "admin")
 	roleB := createTestRole(t, service.db, "审计员", "audit")
 	if err := service.db.Create(&entity.RoleMenu{RoleID: roleA.ID, MenuID: menu.ID}).Error; err != nil {
 		t.Fatalf("create role menu: %v", err)
+	}
+	if err := service.db.Create(&entity.RolePermission{RoleID: roleA.ID, PermissionID: permission.ID}).Error; err != nil {
+		t.Fatalf("create role permission: %v", err)
 	}
 	if err := service.db.Create(&entity.RoleDept{RoleID: roleB.ID, DeptID: dept.ID}).Error; err != nil {
 		t.Fatalf("create role dept: %v", err)
@@ -237,6 +251,13 @@ func TestServiceDeleteRemovesBindingsAndSoftDeletesRoles(t *testing.T) {
 	if menuBindingCount != 0 {
 		t.Fatalf("menuBindingCount = %d, want 0", menuBindingCount)
 	}
+	var permissionBindingCount int64
+	if err := service.db.Model(&entity.RolePermission{}).Where("role_id IN ?", []int64{roleA.ID, roleB.ID}).Count(&permissionBindingCount).Error; err != nil {
+		t.Fatalf("count role permissions: %v", err)
+	}
+	if permissionBindingCount != 0 {
+		t.Fatalf("permissionBindingCount = %d, want 0", permissionBindingCount)
+	}
 	var deptBindingCount int64
 	if err := service.db.Model(&entity.RoleDept{}).Where("role_id IN ?", []int64{roleA.ID, roleB.ID}).Count(&deptBindingCount).Error; err != nil {
 		t.Fatalf("count role depts: %v", err)
@@ -248,8 +269,8 @@ func TestServiceDeleteRemovesBindingsAndSoftDeletesRoles(t *testing.T) {
 
 func TestServiceDeleteBatchesRoles(t *testing.T) {
 	service := newTestService(t)
-	ids := make([]int64, 0, batchSize+1)
-	for i := 0; i < batchSize+1; i++ {
+	ids := make([]int64, 0, enum.BatchSize+1)
+	for i := 0; i < enum.BatchSize+1; i++ {
 		role := createTestRole(t, service.db, "批量角色"+strconv.Itoa(i), "batch-role-"+strconv.Itoa(i))
 		ids = append(ids, role.ID)
 	}
@@ -300,6 +321,7 @@ func TestServiceUpdateUpdatesRoleAndBindings(t *testing.T) {
 	service := newTestService(t)
 	oldMenu := createTestMenu(t, service.db, "system:old")
 	newMenu := createTestMenu(t, service.db, "system:new")
+	newPermission := createTestPermission(t, service.db, newMenu.ID, "system:new:create")
 	oldDept := createTestDept(t, service.db, "旧部门")
 	newDept := createTestDept(t, service.db, "新部门")
 	role := createTestRole(t, service.db, "管理员", "admin")
@@ -315,15 +337,16 @@ func TestServiceUpdateUpdatesRoleAndBindings(t *testing.T) {
 	remark := " 新备注 "
 
 	if err := service.Update(context.Background(), &UpdateReq{
-		ID:        role.ID,
-		Name:      " 经理 ",
-		Code:      " manager ",
-		DataScope: &dataScope,
-		MenuIDs:   []int64{newMenu.ID, newMenu.ID},
-		DeptIDs:   []int64{newDept.ID, newDept.ID},
-		Sort:      &sortValue,
-		Status:    &status,
-		Remark:    &remark,
+		ID:            role.ID,
+		Name:          " 经理 ",
+		Code:          " manager ",
+		DataScope:     &dataScope,
+		MenuIDs:       []int64{newMenu.ID, newMenu.ID},
+		PermissionIDs: []int64{newPermission.ID, newPermission.ID},
+		DeptIDs:       []int64{newDept.ID, newDept.ID},
+		Sort:          &sortValue,
+		Status:        &status,
+		Remark:        &remark,
 	}); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
@@ -342,6 +365,13 @@ func TestServiceUpdateUpdatesRoleAndBindings(t *testing.T) {
 	}
 	if !reflect.DeepEqual(menuIDs, []int64{newMenu.ID}) {
 		t.Fatalf("menuIDs = %#v, want [%d]", menuIDs, newMenu.ID)
+	}
+	var permissionIDs []int64
+	if err := service.db.Model(&entity.RolePermission{}).Where("role_id = ?", role.ID).Pluck("permission_id", &permissionIDs).Error; err != nil {
+		t.Fatalf("query role permissions: %v", err)
+	}
+	if !reflect.DeepEqual(permissionIDs, []int64{newPermission.ID}) {
+		t.Fatalf("permissionIDs = %#v, want [%d]", permissionIDs, newPermission.ID)
 	}
 
 	var deptIDs []int64
@@ -535,8 +565,8 @@ func TestServiceUpdateStatusUpdatesRoles(t *testing.T) {
 
 func TestServiceUpdateStatusBatchesRoles(t *testing.T) {
 	service := newTestService(t)
-	ids := make([]int64, 0, batchSize+1)
-	for i := 0; i < batchSize+1; i++ {
+	ids := make([]int64, 0, enum.BatchSize+1)
+	for i := 0; i < enum.BatchSize+1; i++ {
 		role := createTestRole(t, service.db, "批量状态角色"+strconv.Itoa(i), "batch-status-role-"+strconv.Itoa(i))
 		ids = append(ids, role.ID)
 	}
@@ -581,7 +611,7 @@ func TestServiceUpdateStatusRejectsInvalidRequest(t *testing.T) {
 	}
 }
 
-func TestServiceAssignMenusReplacesRoleMenus(t *testing.T) {
+func TestServiceAssignResourcesReplacesRoleMenus(t *testing.T) {
 	service := newTestService(t)
 	role := createTestRole(t, service.db, "管理员", "admin")
 	oldMenu := createTestMenu(t, service.db, "system:old")
@@ -591,8 +621,8 @@ func TestServiceAssignMenusReplacesRoleMenus(t *testing.T) {
 		t.Fatalf("create old role menu: %v", err)
 	}
 
-	if err := service.AssignMenus(context.Background(), &AssignMenusReq{ID: role.ID, MenuIDs: []int64{menuB.ID, menuA.ID, menuA.ID}}); err != nil {
-		t.Fatalf("AssignMenus() error = %v", err)
+	if err := service.AssignResources(context.Background(), &AssignResourcesReq{ID: role.ID, MenuIDs: []int64{menuB.ID, menuA.ID, menuA.ID}}); err != nil {
+		t.Fatalf("AssignResources() error = %v", err)
 	}
 
 	var menuIDs []int64
@@ -604,7 +634,7 @@ func TestServiceAssignMenusReplacesRoleMenus(t *testing.T) {
 	}
 }
 
-func TestServiceAssignMenusClearsRoleMenus(t *testing.T) {
+func TestServiceAssignResourcesClearsRoleMenus(t *testing.T) {
 	service := newTestService(t)
 	role := createTestRole(t, service.db, "管理员", "admin")
 	menu := createTestMenu(t, service.db, "system:user")
@@ -612,8 +642,8 @@ func TestServiceAssignMenusClearsRoleMenus(t *testing.T) {
 		t.Fatalf("create role menu: %v", err)
 	}
 
-	if err := service.AssignMenus(context.Background(), &AssignMenusReq{ID: role.ID}); err != nil {
-		t.Fatalf("AssignMenus() error = %v", err)
+	if err := service.AssignResources(context.Background(), &AssignResourcesReq{ID: role.ID}); err != nil {
+		t.Fatalf("AssignResources() error = %v", err)
 	}
 
 	var menuBindingCount int64
@@ -625,27 +655,84 @@ func TestServiceAssignMenusClearsRoleMenus(t *testing.T) {
 	}
 }
 
-func TestServiceAssignMenusRejectsInvalidRequest(t *testing.T) {
+func TestServiceAssignResourcesRejectsMenuRequest(t *testing.T) {
 	service := newTestService(t)
 	role := createTestRole(t, service.db, "管理员", "admin")
 
 	tests := []struct {
 		name string
-		req  *AssignMenusReq
+		req  *AssignResourcesReq
 		want int
 	}{
-		{name: "nil request", req: nil, want: errcode.ErrRoleAssignMenusReqNil.Code},
-		{name: "invalid role id", req: &AssignMenusReq{ID: 0}, want: errcode.ErrRoleIDInvalid.Code},
-		{name: "invalid menu id", req: &AssignMenusReq{ID: role.ID, MenuIDs: []int64{0}}, want: errcode.ErrRoleMenuIDInvalid.Code},
-		{name: "missing role", req: &AssignMenusReq{ID: 999}, want: errcode.ErrRoleNotFound.Code},
-		{name: "missing menu", req: &AssignMenusReq{ID: role.ID, MenuIDs: []int64{999}}, want: errcode.ErrRoleMenuNotFound.Code},
+		{name: "nil request", req: nil, want: errcode.ErrRoleAssignResourcesReqNil.Code},
+		{name: "invalid role id", req: &AssignResourcesReq{ID: 0}, want: errcode.ErrRoleIDInvalid.Code},
+		{name: "invalid menu id", req: &AssignResourcesReq{ID: role.ID, MenuIDs: []int64{0}}, want: errcode.ErrRoleMenuIDInvalid.Code},
+		{name: "missing role", req: &AssignResourcesReq{ID: 999}, want: errcode.ErrRoleNotFound.Code},
+		{name: "missing menu", req: &AssignResourcesReq{ID: role.ID, MenuIDs: []int64{999}}, want: errcode.ErrRoleMenuNotFound.Code},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := service.AssignMenus(context.Background(), tt.req)
+			err := service.AssignResources(context.Background(), tt.req)
 			if !foxerrors.IsCode(err, tt.want) {
-				t.Fatalf("AssignMenus() error = %v, want code %d", err, tt.want)
+				t.Fatalf("AssignResources() error = %v, want code %d", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestServiceAssignResourcesReplacesMenusAndPermissions(t *testing.T) {
+	service := newTestService(t)
+	role := createTestRole(t, service.db, "管理员", "admin")
+	menu := createTestMenu(t, service.db, "system:user")
+	permission := createTestPermission(t, service.db, menu.ID, "system:user:create")
+
+	if err := service.AssignResources(context.Background(), &AssignResourcesReq{
+		ID:            role.ID,
+		MenuIDs:       []int64{menu.ID, menu.ID},
+		PermissionIDs: []int64{permission.ID, permission.ID},
+	}); err != nil {
+		t.Fatalf("AssignResources() error = %v", err)
+	}
+
+	resp, err := service.Detail(context.Background(), &DetailReq{ID: role.ID})
+	if err != nil {
+		t.Fatalf("Detail() error = %v", err)
+	}
+	if !reflect.DeepEqual(resp.MenuIDs, []int64{menu.ID}) || !reflect.DeepEqual(resp.PermissionIDs, []int64{permission.ID}) {
+		t.Fatalf("Detail() resources = menus:%v permissions:%v", resp.MenuIDs, resp.PermissionIDs)
+	}
+	if len(resp.Permissions) != 1 || resp.Permissions[0].Code != permission.Code || resp.Permissions[0].MenuID != menu.ID {
+		t.Fatalf("Detail() permissions = %#v", resp.Permissions)
+	}
+}
+
+func TestServiceAssignResourcesRejectsInvalidBindings(t *testing.T) {
+	service := newTestService(t)
+	role := createTestRole(t, service.db, "管理员", "admin")
+	menu := createTestMenu(t, service.db, "system:user")
+	permission := createTestPermission(t, service.db, menu.ID, "system:user:create")
+	disabled := 0
+	disabledMenu := createTestMenu(t, service.db, "system:disabled")
+	if err := service.db.Model(disabledMenu).Update("status", disabled).Error; err != nil {
+		t.Fatalf("disable menu: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		req  *AssignResourcesReq
+		want int
+	}{
+		{name: "nil request", req: nil, want: errcode.ErrRoleAssignResourcesReqNil.Code},
+		{name: "invalid permission", req: &AssignResourcesReq{ID: role.ID, PermissionIDs: []int64{0}}, want: errcode.ErrRolePermissionIDInvalid.Code},
+		{name: "permission menu missing", req: &AssignResourcesReq{ID: role.ID, PermissionIDs: []int64{permission.ID}}, want: errcode.ErrRolePermissionMenuRequired.Code},
+		{name: "disabled menu", req: &AssignResourcesReq{ID: role.ID, MenuIDs: []int64{disabledMenu.ID}}, want: errcode.ErrRoleMenuDisabled.Code},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := service.AssignResources(context.Background(), tt.req)
+			if !foxerrors.IsCode(err, tt.want) {
+				t.Fatalf("AssignResources() error = %v, want code %d", err, tt.want)
 			}
 		})
 	}
@@ -761,7 +848,7 @@ func newTestServiceWithPrefix(t *testing.T, prefix string) *Service {
 	if err := entity.Migrate(db, prefix); err != nil {
 		t.Fatalf("migrate entities: %v", err)
 	}
-	return NewService(db, zap.NewNop(), prefix)
+	return NewService(db, zap.NewNop())
 }
 
 func createTestRole(t *testing.T, db *gorm.DB, name string, code string) *entity.Role {
@@ -777,7 +864,7 @@ func createTestRole(t *testing.T, db *gorm.DB, name string, code string) *entity
 func createTestRoleWithFields(t *testing.T, db *gorm.DB, name string, code string, status *int, sortValue *int) *entity.Role {
 	t.Helper()
 
-	dataScope := defaultDataScope
+	dataScope := enum.DataScopeAll
 	role := &entity.Role{Name: name, Code: code, DataScope: &dataScope, Status: status, Sort: sortValue}
 	if err := db.Create(role).Error; err != nil {
 		t.Fatalf("create role: %v", err)
@@ -793,6 +880,16 @@ func createTestMenu(t *testing.T, db *gorm.DB, name string) *entity.Menu {
 		t.Fatalf("create menu: %v", err)
 	}
 	return menu
+}
+
+func createTestPermission(t *testing.T, db *gorm.DB, menuID int64, code string) *entity.Permission {
+	t.Helper()
+
+	permission := &entity.Permission{MenuID: menuID, Name: code, Code: code}
+	if err := db.Create(permission).Error; err != nil {
+		t.Fatalf("create permission: %v", err)
+	}
+	return permission
 }
 
 func createTestDept(t *testing.T, db *gorm.DB, name string) *entity.Dept {

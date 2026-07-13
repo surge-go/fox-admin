@@ -47,6 +47,16 @@ func (h *Handler) RegisterRoutes(group *fox.RouteGroup) {
 }
 
 // Create 创建用户。
+//
+// @Summary 创建用户
+// @Description 创建用户并保存角色、岗位和部门信息
+// @Tags 系统用户
+// @Accept json
+// @Produce json
+// @Param request body CreateReq true "创建用户请求"
+// @Success 200 {object} map[string]interface{} "创建成功"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /api/v1/system/user/create [post]
 func (h *Handler) Create(c *fox.Context) {
 	var req CreateReq
 	if err := c.Bind(&req); err != nil {
@@ -62,6 +72,16 @@ func (h *Handler) Create(c *fox.Context) {
 }
 
 // Delete 删除用户。
+//
+// @Summary 删除用户
+// @Description 批量软删除用户及其关联关系
+// @Tags 系统用户
+// @Accept json
+// @Produce json
+// @Param request body DeleteReq true "删除用户请求"
+// @Success 200 {object} map[string]interface{} "删除成功"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /api/v1/system/user/delete [post]
 func (h *Handler) Delete(c *fox.Context) {
 	var req DeleteReq
 	if err := c.Bind(&req); err != nil {
@@ -77,6 +97,16 @@ func (h *Handler) Delete(c *fox.Context) {
 }
 
 // Update 更新用户。
+//
+// @Summary 更新用户
+// @Description 更新用户基础信息及角色、岗位和部门绑定
+// @Tags 系统用户
+// @Accept json
+// @Produce json
+// @Param request body UpdateReq true "更新用户请求"
+// @Success 200 {object} map[string]interface{} "更新成功"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /api/v1/system/user/update [post]
 func (h *Handler) Update(c *fox.Context) {
 	var req UpdateReq
 	if err := c.Bind(&req); err != nil {
@@ -92,6 +122,15 @@ func (h *Handler) Update(c *fox.Context) {
 }
 
 // List 查询用户列表。
+//
+// @Summary 查询用户列表
+// @Description 分页查询用户列表
+// @Tags 系统用户
+// @Produce json
+// @Param request query ListReq false "用户查询条件"
+// @Success 200 {object} map[string]interface{} "用户列表"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /api/v1/system/user/list [get]
 func (h *Handler) List(c *fox.Context) {
 	var req ListReq
 	if err := c.BindQuery(&req); err != nil {
@@ -108,6 +147,15 @@ func (h *Handler) List(c *fox.Context) {
 }
 
 // Detail 查询用户详情。
+//
+// @Summary 查询用户详情
+// @Description 查询用户及其角色和岗位绑定详情
+// @Tags 系统用户
+// @Produce json
+// @Param id query int true "用户 ID"
+// @Success 200 {object} map[string]interface{} "用户详情"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /api/v1/system/user/detail [get]
 func (h *Handler) Detail(c *fox.Context) {
 	var req DetailReq
 	if err := c.BindQuery(&req); err != nil {
@@ -124,6 +172,16 @@ func (h *Handler) Detail(c *fox.Context) {
 }
 
 // UpdateStatus 更新用户状态。
+//
+// @Summary 批量更新用户状态
+// @Description 批量启用或禁用用户
+// @Tags 系统用户
+// @Accept json
+// @Produce json
+// @Param request body UpdateStatusReq true "更新用户状态请求"
+// @Success 200 {object} map[string]interface{} "更新成功"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /api/v1/system/user/update-status [post]
 func (h *Handler) UpdateStatus(c *fox.Context) {
 	var req UpdateStatusReq
 	if err := c.Bind(&req); err != nil {
@@ -139,6 +197,16 @@ func (h *Handler) UpdateStatus(c *fox.Context) {
 }
 
 // ResetPassword 重置用户密码。
+//
+// @Summary 重置用户密码
+// @Description 重置指定用户的登录密码
+// @Tags 系统用户
+// @Accept json
+// @Produce json
+// @Param request body ResetPasswordReq true "重置密码请求"
+// @Success 200 {object} map[string]interface{} "重置成功"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /api/v1/system/user/reset-password [post]
 func (h *Handler) ResetPassword(c *fox.Context) {
 	var req ResetPasswordReq
 	if err := c.Bind(&req); err != nil {
@@ -154,6 +222,16 @@ func (h *Handler) ResetPassword(c *fox.Context) {
 }
 
 // AssignRoles 分配用户角色。
+//
+// @Summary 分配用户角色
+// @Description 替换用户绑定的角色集合
+// @Tags 系统用户
+// @Accept json
+// @Produce json
+// @Param request body AssignRolesReq true "分配用户角色请求"
+// @Success 200 {object} map[string]interface{} "分配成功"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /api/v1/system/user/assign-roles [post]
 func (h *Handler) AssignRoles(c *fox.Context) {
 	var req AssignRolesReq
 	if err := c.Bind(&req); err != nil {
