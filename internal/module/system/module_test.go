@@ -8,8 +8,11 @@ import (
 	"testing"
 
 	"fox-admin/internal/module/system/entity"
+	authcore "fox-admin/pkg/auth"
 	"fox-admin/pkg/ptr"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/surge-go/fox"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
@@ -60,7 +63,14 @@ func TestRegisterRoutesRegistersSystemRoutes(t *testing.T) {
 		Mode:        fox.ModeTest,
 		PrintRoutes: ptr.Of(false),
 	})
-	RegisterRoutes(engine.Group("/api/v1"), db, zap.NewNop())
+	redisServer := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = redisClient.Close() })
+	manager, err := authcore.NewManager(redisClient, authcore.Config{Secret: "system-module-test-secret"})
+	if err != nil {
+		t.Fatalf("new auth manager: %v", err)
+	}
+	RegisterRoutes(engine.Group("/api/v1"), db, manager, zap.NewNop())
 
 	userReq := httptest.NewRequest(http.MethodGet, "/api/v1/system/user/list", nil)
 	userRec := httptest.NewRecorder()

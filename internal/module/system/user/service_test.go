@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strconv"
 	"strings"
@@ -10,7 +11,10 @@ import (
 	"fox-admin/internal/errcode"
 	"fox-admin/internal/module/system/entity"
 	"fox-admin/internal/module/system/enum"
+	authcore "fox-admin/pkg/auth"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	foxerrors "github.com/surge-go/fox/core/errors"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -1005,6 +1009,89 @@ func TestServiceAssignRolesRejectsInvalidRequest(t *testing.T) {
 	}
 }
 
+func TestSecurityMutationsRevokeUserSessions(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*testing.T, *Service, *entity.User) error
+	}{
+		{
+			name: "disable user",
+			mutate: func(t *testing.T, service *Service, user *entity.User) error {
+				status := enum.StatusDisabled
+				return service.UpdateStatus(context.Background(), &UpdateStatusReq{IDs: []int64{user.ID}, Status: &status})
+			},
+		},
+		{
+			name: "reset password",
+			mutate: func(t *testing.T, service *Service, user *entity.User) error {
+				return service.ResetPassword(context.Background(), &ResetPasswordReq{ID: user.ID, Password: "new-password"})
+			},
+		},
+		{
+			name: "assign roles",
+			mutate: func(t *testing.T, service *Service, user *entity.User) error {
+				role := createTestRole(t, service.db, "审计员", "audit")
+				return service.AssignRoles(context.Background(), &AssignRolesReq{ID: user.ID, RoleIDs: []int64{role.ID}})
+			},
+		},
+		{
+			name: "delete user",
+			mutate: func(t *testing.T, service *Service, user *entity.User) error {
+				return service.Delete(context.Background(), &DeleteReq{IDs: []int64{user.ID}})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := newTestService(t)
+			user := createTestUser(t, service.db, "security-user")
+			pair, err := service.manager.Issue(context.Background(), authcore.LoginContext{
+				Subject: authcore.Subject{
+					ID:       user.ID,
+					Type:     authcore.SubjectAdmin,
+					Provider: authcore.ProviderLocal,
+				},
+				Platform: authcore.PlatformWeb,
+			})
+			if err != nil {
+				t.Fatalf("Issue() error = %v", err)
+			}
+
+			if err := tt.mutate(t, service, user); err != nil {
+				t.Fatalf("security mutation error = %v", err)
+			}
+			if _, err := service.manager.VerifyAccess(context.Background(), pair.AccessToken); !errors.Is(err, authcore.ErrSessionNotFound) {
+				t.Fatalf("VerifyAccess() error = %v, want session not found", err)
+			}
+		})
+	}
+}
+
+func TestServiceEnableStatusKeepsUserSessions(t *testing.T) {
+	service := newTestService(t)
+	user := createTestUser(t, service.db, "enabled-user")
+	pair, err := service.manager.Issue(context.Background(), authcore.LoginContext{
+		Subject: authcore.Subject{
+			ID:       user.ID,
+			Type:     authcore.SubjectAdmin,
+			Provider: authcore.ProviderLocal,
+		},
+		Platform: authcore.PlatformWeb,
+	})
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	status := enum.StatusEnabled
+	if err := service.UpdateStatus(context.Background(), &UpdateStatusReq{IDs: []int64{user.ID}, Status: &status}); err != nil {
+		t.Fatalf("UpdateStatus() error = %v", err)
+	}
+	if _, err := service.manager.VerifyAccess(context.Background(), pair.AccessToken); err != nil {
+		t.Fatalf("VerifyAccess() error = %v, want session preserved", err)
+	}
+}
+
 func newTestService(t *testing.T) *Service {
 	t.Helper()
 
@@ -1024,7 +1111,14 @@ func newTestServiceWithTablePrefix(t *testing.T, tablePrefix string) *Service {
 	if err := entity.Migrate(db, tablePrefix); err != nil {
 		t.Fatalf("migrate entities: %v", err)
 	}
-	return NewService(db, zap.NewNop())
+	redisServer := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = redisClient.Close() })
+	manager, err := authcore.NewManager(redisClient, authcore.Config{Secret: "user-service-test-secret"})
+	if err != nil {
+		t.Fatalf("new auth manager: %v", err)
+	}
+	return NewService(db, manager, zap.NewNop())
 }
 
 func createTestUser(t *testing.T, db *gorm.DB, username string) *entity.User {

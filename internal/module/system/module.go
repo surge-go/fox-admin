@@ -7,6 +7,7 @@ import (
 	"fox-admin/internal/module/system/role"
 	"fox-admin/internal/module/system/seed"
 	"fox-admin/internal/module/system/user"
+	authcore "fox-admin/pkg/auth"
 
 	"github.com/surge-go/fox"
 	"go.uber.org/zap"
@@ -22,7 +23,7 @@ func Migrate(db *gorm.DB, tablePrefixes ...string) error {
 }
 
 // RegisterRoutes 注册系统模块 HTTP 路由。
-func RegisterRoutes(group *fox.RouteGroup, db *gorm.DB, logger *zap.Logger) {
+func RegisterRoutes(group *fox.RouteGroup, db *gorm.DB, manager *authcore.Manager, logger *zap.Logger) {
 	if group == nil {
 		panic("system module route group is nil")
 	}
@@ -36,7 +37,7 @@ func RegisterRoutes(group *fox.RouteGroup, db *gorm.DB, logger *zap.Logger) {
 	permissionService := permission.NewService(db, logger)
 	permission.NewHandler(permissionService, logger).RegisterRoutes(systemGroup)
 	// 注册用户模块
-	userService := user.NewService(db, logger)
+	userService := user.NewService(db, manager, logger)
 	user.NewHandler(userService, logger).RegisterRoutes(systemGroup)
 	// 注册角色模块
 	roleService := role.NewService(db, logger)

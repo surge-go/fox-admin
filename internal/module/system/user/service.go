@@ -10,6 +10,7 @@ import (
 	"fox-admin/internal/module/system/entity"
 	"fox-admin/internal/module/system/enum"
 	"fox-admin/internal/observability/tracing"
+	authcore "fox-admin/pkg/auth"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -24,22 +25,42 @@ var tracer = otel.Tracer("fox-admin/internal/module/system/user")
 
 // Service 表示用户业务服务。
 type Service struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	db      *gorm.DB
+	manager *authcore.Manager
+	logger  *zap.Logger
 }
 
 // NewService 创建用户业务服务。
-func NewService(db *gorm.DB, logger *zap.Logger) *Service {
+func NewService(db *gorm.DB, manager *authcore.Manager, logger *zap.Logger) *Service {
 	if db == nil {
 		panic("user service db is nil")
+	}
+	if manager == nil {
+		panic("user service auth manager is nil")
 	}
 	if logger == nil {
 		panic("user service logger is nil")
 	}
 	return &Service{
-		db:     db,
-		logger: logger,
+		db:      db,
+		manager: manager,
+		logger:  logger,
 	}
+}
+
+// revokeUserSessions 吊销后台用户的全部登录会话。
+func (s *Service) revokeUserSessions(ctx context.Context, userIDs []int64) error {
+	for _, userID := range userIDs {
+		if err := s.manager.RevokeSubject(ctx, authcore.SubjectAdmin, userID); err != nil {
+			// 用户从未登录或 session 已全部失效时无需阻止后续安全变更。
+			if errors.Is(err, authcore.ErrSessionNotFound) {
+				continue
+			}
+			s.logger.Error("吊销用户登录会话失败", zap.Int64("user_id", userID), zap.Error(err))
+			return errcode.ErrUserSessionRevokeFailed.WithErr(err)
+		}
+	}
+	return nil
 }
 
 // Create 创建用户。
@@ -361,7 +382,7 @@ func (s *Service) Delete(ctx context.Context, req *DeleteReq) (err error) {
 				return errcode.ErrUserDeleteFailed.WithErr(err)
 			}
 		}
-		return nil
+		return s.revokeUserSessions(ctx, ids)
 	})
 }
 
@@ -613,7 +634,8 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) (err error) {
 			}
 		}
 
-		return nil
+		// Update 会整体替换角色绑定，提交前吊销 session 使权限变化立即生效。
+		return s.revokeUserSessions(ctx, []int64{req.ID})
 	})
 }
 
@@ -892,7 +914,6 @@ func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) (err e
 		attribute.Int("user.batch_size", len(ids)),
 		attribute.Int("user.status", *req.Status),
 	)
-
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for start := 0; start < len(ids); start += enum.BatchSize {
 			end := start + enum.BatchSize
@@ -914,6 +935,9 @@ func (s *Service) UpdateStatus(ctx context.Context, req *UpdateStatusReq) (err e
 				logger.Error("更新用户状态失败：写入用户失败", zap.Int64s("user_ids", batchIDs), zap.Int("status", *req.Status), zap.Error(err))
 				return errcode.ErrUserUpdateStatusFailed.WithErr(err)
 			}
+		}
+		if *req.Status == enum.StatusDisabled {
+			return s.revokeUserSessions(ctx, ids)
 		}
 		return nil
 	})
@@ -949,7 +973,6 @@ func (s *Service) ResetPassword(ctx context.Context, req *ResetPasswordReq) (err
 		logger.Error("重置用户密码失败：密码摘要生成失败", zap.Int64("user_id", req.ID), zap.Error(err))
 		return errcode.ErrUserResetPasswordFailed.WithErr(err)
 	}
-
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var userCount int64
 		if err := tx.Model(&entity.User{}).Where("id = ?", req.ID).Count(&userCount).Error; err != nil {
@@ -964,7 +987,7 @@ func (s *Service) ResetPassword(ctx context.Context, req *ResetPasswordReq) (err
 			logger.Error("重置用户密码失败：写入用户失败", zap.Int64("user_id", req.ID), zap.Error(err))
 			return errcode.ErrUserResetPasswordFailed.WithErr(err)
 		}
-		return nil
+		return s.revokeUserSessions(ctx, []int64{req.ID})
 	})
 }
 
@@ -1032,7 +1055,7 @@ func (s *Service) AssignRoles(ctx context.Context, req *AssignRolesReq) (err err
 			return errcode.ErrUserAssignRolesFailed.WithErr(err)
 		}
 		if len(roleIDs) == 0 {
-			return nil
+			return s.revokeUserSessions(ctx, []int64{req.ID})
 		}
 
 		userRoles := make([]entity.UserRole, 0, len(roleIDs))
@@ -1046,6 +1069,6 @@ func (s *Service) AssignRoles(ctx context.Context, req *AssignRolesReq) (err err
 			logger.Error("分配用户角色失败：写入用户角色失败", zap.Int64("user_id", req.ID), zap.Int64s("role_ids", roleIDs), zap.Error(err))
 			return errcode.ErrUserAssignRolesFailed.WithErr(err)
 		}
-		return nil
+		return s.revokeUserSessions(ctx, []int64{req.ID})
 	})
 }

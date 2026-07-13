@@ -35,7 +35,7 @@ func main() {
 		middleware.Gzip(),
 	)
 	v1 := app.Engine().Group("/api/v1")
-	system.RegisterRoutes(v1, app.DB(), app.Logger())
+	system.RegisterRoutes(v1, app.DB(), app.AuthManager(), app.Logger())
 	registerSwaggerRoutes(app.Engine())
 	if err = app.Run(); err != nil {
 		log.Fatalf("run application: %v", err)

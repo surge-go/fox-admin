@@ -211,10 +211,8 @@ var (
 	ErrAuthUsernameRequired = errors.NewWithStatus(1103, http.StatusOK, "登录账号不能为空")
 	// ErrAuthPasswordRequired 表示登录密码为空。
 	ErrAuthPasswordRequired = errors.NewWithStatus(1104, http.StatusOK, "登录密码不能为空")
-	// ErrAuthUserNotFound 表示登录用户不存在。
-	ErrAuthUserNotFound = errors.NewWithStatus(1105, http.StatusOK, "账号或密码错误")
-	// ErrAuthPasswordInvalid 表示登录密码错误。
-	ErrAuthPasswordInvalid = errors.NewWithStatus(1106, http.StatusOK, "账号或密码错误")
+	// ErrAuthCredentialsInvalid 表示登录账号或密码错误。
+	ErrAuthCredentialsInvalid = errors.NewWithStatus(1105, http.StatusOK, "账号或密码错误")
 	// ErrAuthUserDisabled 表示登录用户已禁用。
 	ErrAuthUserDisabled = errors.NewWithStatus(1107, http.StatusOK, "用户已禁用")
 	// ErrAuthTokenInvalid 表示认证 token 非法。
@@ -225,6 +223,8 @@ var (
 	ErrAuthUserQueryFailed = errors.NewWithStatus(1110, http.StatusInternalServerError, "查询认证用户失败")
 	// ErrAuthRoleQueryFailed 表示查询认证角色失败。
 	ErrAuthRoleQueryFailed = errors.NewWithStatus(1111, http.StatusInternalServerError, "查询认证角色失败")
+	// ErrAuthPermissionQueryFailed 表示查询认证权限失败。
+	ErrAuthPermissionQueryFailed = errors.NewWithStatus(1163, http.StatusInternalServerError, "查询认证权限失败")
 	// ErrAuthMenuQueryFailed 表示查询认证菜单失败。
 	ErrAuthMenuQueryFailed = errors.NewWithStatus(1112, http.StatusInternalServerError, "查询认证菜单失败")
 	// ErrAuthTokenSignFailed 表示签发认证 token 失败。
@@ -327,4 +327,8 @@ var (
 	ErrPermissionIDsRequired = errors.NewWithStatus(1161, http.StatusOK, "权限 ID 集合不能为空")
 	// ErrPermissionUpdateStatusFailed 表示更新权限状态失败。
 	ErrPermissionUpdateStatusFailed = errors.NewWithStatus(1162, http.StatusInternalServerError, "更新权限状态失败")
+	// ErrRoleMenuAncestorRequired 表示角色分配子菜单时缺少父菜单。
+	ErrRoleMenuAncestorRequired = errors.NewWithStatus(1164, http.StatusOK, "子菜单的父菜单必须同时分配给角色")
+	// ErrUserSessionRevokeFailed 表示吊销用户登录会话失败。
+	ErrUserSessionRevokeFailed = errors.NewWithStatus(1165, http.StatusInternalServerError, "吊销用户登录会话失败")
 )

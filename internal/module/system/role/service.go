@@ -75,7 +75,7 @@ func (s *Service) validateResources(tx *gorm.DB, menuIDs, permissionIDs []int64)
 	menuSet := make(map[int64]struct{}, len(menuIDs))
 	if len(menuIDs) > 0 {
 		var menus []entity.Menu
-		if err := tx.Select("id, status").Where("id IN ?", menuIDs).Find(&menus).Error; err != nil {
+		if err := tx.Select("id, parent_id, status").Where("id IN ?", menuIDs).Find(&menus).Error; err != nil {
 			return errcode.ErrRoleMenuQueryFailed.WithErr(err)
 		}
 		if len(menus) != len(menuIDs) {
@@ -86,6 +86,15 @@ func (s *Service) validateResources(tx *gorm.DB, menuIDs, permissionIDs []int64)
 				return errcode.ErrRoleMenuDisabled
 			}
 			menuSet[menus[i].ID] = struct{}{}
+		}
+		// 角色分配子菜单时必须同时包含全部父级，保证动态路由能够形成完整树结构。
+		for i := range menus {
+			if menus[i].ParentID == 0 {
+				continue
+			}
+			if _, ok := menuSet[menus[i].ParentID]; !ok {
+				return errcode.ErrRoleMenuAncestorRequired
+			}
 		}
 	}
 

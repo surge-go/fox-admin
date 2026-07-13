@@ -712,6 +712,10 @@ func TestServiceAssignResourcesRejectsInvalidBindings(t *testing.T) {
 	role := createTestRole(t, service.db, "管理员", "admin")
 	menu := createTestMenu(t, service.db, "system:user")
 	permission := createTestPermission(t, service.db, menu.ID, "system:user:create")
+	childMenu := createTestMenu(t, service.db, "system:user:detail")
+	if err := service.db.Model(childMenu).Update("parent_id", menu.ID).Error; err != nil {
+		t.Fatalf("update child menu parent: %v", err)
+	}
 	disabled := 0
 	disabledMenu := createTestMenu(t, service.db, "system:disabled")
 	if err := service.db.Model(disabledMenu).Update("status", disabled).Error; err != nil {
@@ -727,6 +731,7 @@ func TestServiceAssignResourcesRejectsInvalidBindings(t *testing.T) {
 		{name: "invalid permission", req: &AssignResourcesReq{ID: role.ID, PermissionIDs: []int64{0}}, want: errcode.ErrRolePermissionIDInvalid.Code},
 		{name: "permission menu missing", req: &AssignResourcesReq{ID: role.ID, PermissionIDs: []int64{permission.ID}}, want: errcode.ErrRolePermissionMenuRequired.Code},
 		{name: "disabled menu", req: &AssignResourcesReq{ID: role.ID, MenuIDs: []int64{disabledMenu.ID}}, want: errcode.ErrRoleMenuDisabled.Code},
+		{name: "parent menu missing", req: &AssignResourcesReq{ID: role.ID, MenuIDs: []int64{childMenu.ID}}, want: errcode.ErrRoleMenuAncestorRequired.Code},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
