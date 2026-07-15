@@ -32,6 +32,21 @@ func TestAuthRejectsMalformedAccessToken(t *testing.T) {
 	assertResponseCode(t, rec.Body.String(), 1108)
 }
 
+func TestAuthRejectsInvalidSignatureAsInvalidToken(t *testing.T) {
+	manager, closeManager, _ := newTestAuthManager(t)
+	defer closeManager()
+	pair := issueTestTokenPair(t, manager)
+
+	replacement := "a"
+	if strings.HasSuffix(pair.AccessToken, replacement) {
+		replacement = "b"
+	}
+	invalidToken := pair.AccessToken[:len(pair.AccessToken)-1] + replacement
+	headers := map[string]string{DefaultAccessHeaderName: "Bearer " + invalidToken}
+	rec := performAuthRequest(t, manager, headers, nil)
+	assertResponseCode(t, rec.Body.String(), 1108)
+}
+
 func TestAuthRejectsRevokedSession(t *testing.T) {
 	manager, closeManager, _ := newTestAuthManager(t)
 	defer closeManager()

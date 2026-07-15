@@ -7,13 +7,20 @@ import (
 	"net/http"
 
 	"fox-admin/internal/application"
+	"fox-admin/internal/middleware"
 	"fox-admin/internal/module/system"
 
 	"github.com/surge-go/fox"
-	"github.com/surge-go/fox/middleware"
+	foxmiddleware "github.com/surge-go/fox/middleware"
 	"github.com/wdcbot/qingfeng"
 )
 
+// @title fox-admin API
+// @version 1.0.0
+// @description fox-admin 后台管理接口文档
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func main() {
 	configPath := flag.String("config", "configs/config.yaml", "config file path")
 	flag.Parse()
@@ -24,22 +31,51 @@ func main() {
 	}
 
 	defer app.Close()
+	corsConfig := newCORSConfig()
 	app.Engine().Use(
-		middleware.Tracing(),
-		middleware.RequestID(),
-		middleware.Logger(),
-		middleware.Timeout(),
-		middleware.CORS(),
-		middleware.BodyLimit(),
-		middleware.RateLimit(),
-		middleware.Gzip(),
+		foxmiddleware.Tracing(),
+		foxmiddleware.RequestID(),
+		foxmiddleware.Logger(),
+		foxmiddleware.Timeout(),
+		foxmiddleware.CORSWithConfig(corsConfig),
+		foxmiddleware.BodyLimit(),
+		foxmiddleware.RateLimit(),
+		foxmiddleware.Gzip(),
 	)
-	v1 := app.Engine().Group("/api/v1")
-	system.RegisterRoutes(v1, app.DB(), app.AuthManager(), app.Logger())
+	authManager := app.AuthManager()
+	if authManager == nil {
+		log.Fatal("auth manager is nil")
+	}
+	v1 := app.Engine().Group("/api/v1", middleware.AuthWithConfig(middleware.AuthConfig{
+		Manager: authManager,
+		SkipPaths: []string{
+			"/api/v1/system/auth/login",
+			"/api/v1/system/auth/refresh",
+		},
+	}))
+	system.RegisterRoutes(v1, app.DB(), authManager, app.Logger())
 	registerSwaggerRoutes(app.Engine())
 	if err = app.Run(); err != nil {
 		log.Fatalf("run application: %v", err)
 	}
+}
+
+func newCORSConfig() foxmiddleware.CORSConfig {
+	corsConfig := foxmiddleware.DefaultCORSConfig()
+	corsConfig.AllowHeaders = append(
+		corsConfig.AllowHeaders,
+		middleware.DefaultDeviceIDHeaderName,
+		middleware.DefaultRefreshHeaderName,
+	)
+	corsConfig.ExposeHeaders = []string{
+		"X-Request-ID",
+		middleware.DefaultAccessResponseHeaderName,
+		middleware.DefaultRefreshResponseHeaderName,
+		middleware.AccessExpiresAtHeaderName,
+		middleware.RefreshExpiresAtHeaderName,
+		middleware.TokenTypeHeaderName,
+	}
+	return corsConfig
 }
 
 func registerSwaggerRoutes(engine *fox.Engine) {

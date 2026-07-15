@@ -33,9 +33,6 @@ type ListReq struct {
 	MenuID int64 `json:"menu_id" form:"menu_id"`
 }
 
-// ListResp 表示查询权限列表响应。
-type ListResp []*ListItemResp
-
 // ListItemResp 表示权限列表项。
 type ListItemResp struct {
 	ID        int64     `json:"id"`

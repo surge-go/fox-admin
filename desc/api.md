@@ -6,7 +6,7 @@
 
 - 基础地址：`/api/v1`
 - 系统模块前缀：`/api/v1/system`
-- 认证模块前缀：`/api/v1/auth`
+- 认证模块前缀：`/api/v1/system/auth`
 - POST 请求参数默认使用 JSON Body。
 - GET 请求参数默认使用 Query String。
 - 时间字段使用后端 JSON 序列化后的 `time.Time` 字符串。
@@ -17,11 +17,13 @@
 | Header | 必填 | 说明 |
 | --- | --- | --- |
 | `Content-Type: application/json` | POST 请求必填 | JSON 请求体 |
-| `Authorization: Bearer <access_token>` | logout 必填 | 携带 access token |
+| `Authorization: Bearer <access_token>` | 受保护接口必填 | 携带 access token |
+| `X-Device-ID` | 否 | 登录设备 ID |
+| `X-Refresh-Token` | refresh 必填 | 携带 refresh token |
 
 ### 认证范围
 
-当前 `internal/module/system` 已注册认证接口（`/api/v1/auth/login`、`/api/v1/auth/refresh`、`/api/v1/auth/logout`），但尚未挂载鉴权中间件；除以上三个认证端点外的所有现有 `/api/v1/system/*` 端点暂不要求 `Authorization`。后续接入业务鉴权时，仅需在 `cmd/fox-admin/main.go` 中注册 `middleware.Auth`。
+`/api/v1/system/auth/login` 和 `/api/v1/system/auth/refresh` 是公开接口。其余 `/api/v1/system/auth/*` 和 `/api/v1/system/*` 接口统一由认证中间件校验 access token；access token 过期且请求携带有效 `X-Refresh-Token` 时，中间件会自动轮换 token，并通过响应头返回新凭证。
 
 ### 统一响应
 
@@ -60,9 +62,9 @@
 ### 登录
 
 - Method：`POST`
-- URL：`/api/v1/auth/login`
+- URL：`/api/v1/system/auth/login`
 - Auth：否（公开）
-- Headers：`Content-Type: application/json`
+- Headers：`Content-Type: application/json`，可选 `X-Device-ID`
 
 请求参数：
 
@@ -70,8 +72,8 @@
 | --- | --- | --- | --- |
 | `username` | string | 是 | 登录账号 |
 | `password` | string | 是 | 登录密码 |
-| `platform` | string | 是 | 平台标识，枚举：`web` / `h5` / `android` / `ios` / `miniapp` |
-| `device_id` | string | 否 | 设备 ID；当对应平台策略 `require_device_id=true` 时必填 |
+
+后台登录平台由服务端固定为 `web`，客户端不能通过请求参数或 Header 更改平台策略。设备 ID 通过 `X-Device-ID` Header 传入。
 
 响应 `data`：
 
@@ -80,7 +82,7 @@
 | `access_token` | string | JWT access token |
 | `refresh_token` | string | 不透明 refresh token |
 | `token_type` | string | 固定 `Bearer` |
-| `expires_at` | string | access token 过期时间（RFC3339Nano） |
+| `access_expires_at` | string | access token 过期时间（RFC3339Nano） |
 | `refresh_expires_at` | string | refresh token 过期时间（RFC3339Nano） |
 
 业务错误码：
@@ -91,7 +93,6 @@
 | 1103 | 登录账号不能为空 |
 | 1104 | 登录密码不能为空 |
 | 1105 | 账号或密码错误 |
-| 1106 | 账号或密码错误 |
 | 1107 | 用户已禁用 |
 | 1110 | 查询认证用户失败 |
 | 1113 | 签发登录凭证失败 |
@@ -104,15 +105,11 @@
 ### 刷新 token
 
 - Method：`POST`
-- URL：`/api/v1/auth/refresh`
+- URL：`/api/v1/system/auth/refresh`
 - Auth：否（公开端点；但要求携带有效 refresh token）
-- Headers：`Content-Type: application/json`
+- Headers：`X-Refresh-Token: <refresh_token>`
 
-请求参数：
-
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `refresh_token` | string | 是 | 登录或上次刷新时返回的 refresh token |
+请求参数：无。refresh token 只通过 Header 传递。
 
 响应 `data`：同登录响应。
 
@@ -120,7 +117,6 @@
 
 | code | message |
 | --- | --- |
-| 1102 | 登录参数不能为空 |
 | 1108 | 登录状态无效（含 refresh 非法、被重放、session 不存在） |
 | 1109 | 登录状态已过期 |
 | 1114 | 认证服务暂不可用 |
@@ -128,8 +124,8 @@
 ### 登出
 
 - Method：`POST`
-- URL：`/api/v1/auth/logout`
-- Auth：否（公开端点；但要求 `Authorization: Bearer <access_token>` 头）
+- URL：`/api/v1/system/auth/logout`
+- Auth：是
 - Headers：`Authorization: Bearer <access_token>` 必填
 
 请求参数：无（body 可省略 `{}`）。
@@ -144,13 +140,29 @@
 | 1109 | 登录状态已过期 |
 | 1114 | 认证服务暂不可用 |
 
+### 当前用户信息
+
+- Method：`GET`
+- URL：`/api/v1/system/auth/user-info`
+- Auth：是
+
+响应 `data` 返回当前用户基础信息、启用角色编码数组 `roles` 和启用权限标识数组 `permissions`。
+
+### 当前用户动态路由
+
+- Method：`GET`
+- URL：`/api/v1/system/auth/routers`
+- Auth：是
+
+响应 `data` 直接返回 Arco Pro 动态路由树数组，路由 `meta.requiresAuth` 固定为 `true`。
+
 ## 菜单接口
 
 ### 创建菜单
 
 - Method：`POST`
 - URL：`/api/v1/system/menu/create`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：
@@ -182,7 +194,7 @@
 
 - Method：`POST`
 - URL：`/api/v1/system/menu/delete`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：
@@ -197,7 +209,7 @@
 
 - Method：`POST`
 - URL：`/api/v1/system/menu/update`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：同创建菜单，并额外包含必填字段 `id`。
@@ -214,7 +226,7 @@
 
 - Method：`GET`
 - URL：`/api/v1/system/menu/tree`
-- Auth：否
+- Auth：是
 - Headers：无
 
 请求参数：无。
@@ -250,7 +262,7 @@
 
 - Method：`GET`
 - URL：`/api/v1/system/menu/options`
-- Auth：否
+- Auth：是
 - Headers：无
 
 请求参数：无。
@@ -261,7 +273,7 @@
 
 - Method：`GET`
 - URL：`/api/v1/system/menu/detail?id=1`
-- Auth：否
+- Auth：是
 - Headers：无
 
 Query 参数：
@@ -278,7 +290,7 @@ Query 参数：
 
 - Method：`POST`
 - URL：`/api/v1/system/role/create`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：
@@ -301,7 +313,7 @@ Query 参数：
 
 - Method：`POST`
 - URL：`/api/v1/system/role/delete`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：
@@ -316,7 +328,7 @@ Query 参数：
 
 - Method：`POST`
 - URL：`/api/v1/system/role/update`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：同创建角色，并额外包含必填字段 `id`。
@@ -331,7 +343,7 @@ Query 参数：
 
 - Method：`GET`
 - URL：`/api/v1/system/role/list?page=1&size=10`
-- Auth：否
+- Auth：是
 - Headers：无
 
 Query 参数：
@@ -369,7 +381,7 @@ Query 参数：
 
 - Method：`GET`
 - URL：`/api/v1/system/role/detail?id=1`
-- Auth：否
+- Auth：是
 - Headers：无
 
 Query 参数：
@@ -400,7 +412,7 @@ Query 参数：
 
 - Method：`POST`
 - URL：`/api/v1/system/role/assign-resources`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：
@@ -419,7 +431,7 @@ Query 参数：
 
 - Method：`POST`
 - URL：`/api/v1/system/role/update-status`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：
@@ -437,7 +449,7 @@ Query 参数：
 
 - Method：`POST`
 - URL：`/api/v1/system/user/create`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：
@@ -463,7 +475,7 @@ Query 参数：
 
 - Method：`POST`
 - URL：`/api/v1/system/user/delete`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：
@@ -478,7 +490,7 @@ Query 参数：
 
 - Method：`POST`
 - URL：`/api/v1/system/user/update`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：同创建用户，但不包含 `password`，并额外包含必填字段 `id`。
@@ -493,7 +505,7 @@ Query 参数：
 
 - Method：`GET`
 - URL：`/api/v1/system/user/list?page=1&size=10`
-- Auth：否
+- Auth：是
 - Headers：无
 
 Query 参数：
@@ -535,7 +547,7 @@ Query 参数：
 
 - Method：`GET`
 - URL：`/api/v1/system/user/detail?id=1`
-- Auth：否
+- Auth：是
 - Headers：无
 
 Query 参数：
@@ -567,7 +579,7 @@ Query 参数：
 
 - Method：`POST`
 - URL：`/api/v1/system/user/update-status`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：
@@ -583,7 +595,7 @@ Query 参数：
 
 - Method：`POST`
 - URL：`/api/v1/system/user/reset-password`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：
@@ -599,7 +611,7 @@ Query 参数：
 
 - Method：`POST`
 - URL：`/api/v1/system/user/assign-roles`
-- Auth：否
+- Auth：是
 - Headers：`Content-Type: application/json`
 
 请求参数：
@@ -628,22 +640,22 @@ curl 'http://127.0.0.1:8080/api/v1/system/user/list?page=1&size=10'
 登录：
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/v1/auth/login \
+curl -X POST http://127.0.0.1:8080/api/v1/system/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"admin123456","platform":"web","device_id":"dev-1"}'
+  -H 'X-Device-ID: dev-1' \
+  -d '{"username":"admin","password":"123456"}'
 ```
 
 刷新 token：
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/v1/auth/refresh \
-  -H 'Content-Type: application/json' \
-  -d '{"refresh_token":"<refresh_token>"}'
+curl -X POST http://127.0.0.1:8080/api/v1/system/auth/refresh \
+  -H 'X-Refresh-Token: <refresh_token>'
 ```
 
 登出：
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/v1/auth/logout \
+curl -X POST http://127.0.0.1:8080/api/v1/system/auth/logout \
   -H 'Authorization: Bearer <access_token>'
 ```

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"fox-admin/internal/dto"
 	"fox-admin/internal/errcode"
 	"fox-admin/internal/module/system/entity"
 	"fox-admin/internal/module/system/enum"
@@ -587,7 +588,7 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) (err error) {
 }
 
 // List 查询角色列表。
-func (s *Service) List(ctx context.Context, req *ListReq) (resp *ListResp, err error) {
+func (s *Service) List(ctx context.Context, req *ListReq) (resp *dto.PageResp[*ListItemResp], err error) {
 	ctx, span := tracer.Start(ctx, "system.role.List")
 	span.SetAttributes(
 		attribute.String("system.module", "role"),
@@ -654,7 +655,7 @@ func (s *Service) List(ctx context.Context, req *ListReq) (resp *ListResp, err e
 		return nil, errcode.ErrRoleListQueryFailed.WithErr(err)
 	}
 
-	return &ListResp{Total: total, List: items}, nil
+	return dto.NewPageResp(items, total), nil
 }
 
 // Options 查询角色选项。
@@ -712,8 +713,19 @@ func (s *Service) Detail(ctx context.Context, req *DetailReq) (resp *DetailResp,
 	menuTable := entity.Menu{}.TableName()
 	permissionTable := entity.Permission{}.TableName()
 	deptTable := entity.Dept{}.TableName()
+	type detailRow struct {
+		ID        int64     `gorm:"column:id"`
+		Name      string    `gorm:"column:name"`
+		Code      string    `gorm:"column:code"`
+		DataScope *string   `gorm:"column:data_scope"`
+		Sort      *int      `gorm:"column:sort"`
+		Status    *int      `gorm:"column:status"`
+		Remark    *string   `gorm:"column:remark"`
+		CreatedAt time.Time `gorm:"column:created_at"`
+		UpdatedAt time.Time `gorm:"column:updated_at"`
+	}
 
-	var row DetailResp
+	var row detailRow
 	if err := s.db.WithContext(ctx).
 		Table(entity.Role{}.TableName()+" AS r").
 		Select("r.id, r.name, r.code, r.data_scope, r.sort, r.status, r.remark, r.created_at, r.updated_at").
@@ -774,18 +786,28 @@ func (s *Service) Detail(ctx context.Context, req *DetailReq) (resp *DetailResp,
 		deptIDs = append(deptIDs, dept.ID)
 	}
 
-	row.MenuIDs = menuIDs
-	row.Menus = menus
-	row.PermissionIDs = permissionIDs
-	row.Permissions = permissions
-	row.DeptIDs = deptIDs
-	row.Depts = depts
 	span.SetAttributes(
 		attribute.Int("role.menu_count", len(menuIDs)),
 		attribute.Int("role.permission_count", len(permissionIDs)),
 		attribute.Int("role.dept_count", len(deptIDs)),
 	)
-	return &row, nil
+	return &DetailResp{
+		ID:            row.ID,
+		Name:          row.Name,
+		Code:          row.Code,
+		DataScope:     row.DataScope,
+		MenuIDs:       menuIDs,
+		Menus:         menus,
+		PermissionIDs: permissionIDs,
+		Permissions:   permissions,
+		DeptIDs:       deptIDs,
+		Depts:         depts,
+		Sort:          row.Sort,
+		Status:        row.Status,
+		Remark:        row.Remark,
+		CreatedAt:     row.CreatedAt,
+		UpdatedAt:     row.UpdatedAt,
+	}, nil
 }
 
 // UpdateStatus 更新角色状态。

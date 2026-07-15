@@ -1,6 +1,7 @@
 package system
 
 import (
+	systemauth "fox-admin/internal/module/system/auth"
 	"fox-admin/internal/module/system/entity"
 	"fox-admin/internal/module/system/menu"
 	"fox-admin/internal/module/system/permission"
@@ -29,6 +30,10 @@ func RegisterRoutes(group *fox.RouteGroup, db *gorm.DB, manager *authcore.Manage
 	}
 
 	systemGroup := group.Group("/system")
+
+	// 注册认证模块
+	authService := systemauth.NewService(db, manager, logger)
+	systemauth.NewHandler(authService, logger).RegisterRoutes(systemGroup)
 
 	// 注册菜单模块
 	menuService := menu.NewService(db, logger)

@@ -49,12 +49,6 @@ type ListReq struct {
 	Size     int    `json:"size" form:"size"`
 }
 
-// ListResp 表示查询用户列表响应。
-type ListResp struct {
-	Total int64           `json:"total"`
-	List  []*ListItemResp `json:"list"`
-}
-
 // ListItemResp 表示用户列表项。
 type ListItemResp struct {
 	ID        int64     `json:"id"`

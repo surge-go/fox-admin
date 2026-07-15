@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"fox-admin/internal/dto"
 	"fox-admin/internal/errcode"
 	"fox-admin/internal/module/system/entity"
 	"fox-admin/internal/module/system/enum"
@@ -319,7 +320,7 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) (err error) {
 }
 
 // List 查询权限列表。
-func (s *Service) List(ctx context.Context, req *ListReq) (resp ListResp, err error) {
+func (s *Service) List(ctx context.Context, req *ListReq) (resp *dto.PageResp[*ListItemResp], err error) {
 	ctx, span := tracer.Start(ctx, "system.permission.List")
 	span.SetAttributes(
 		attribute.String("system.module", "permission"),
@@ -351,7 +352,7 @@ func (s *Service) List(ctx context.Context, req *ListReq) (resp ListResp, err er
 	}
 
 	// 菜单管理需要同时展示启用和禁用权限，只排除已经软删除的记录。
-	items := make(ListResp, 0)
+	items := make([]*ListItemResp, 0)
 	if err := s.db.WithContext(ctx).
 		Model(&entity.Permission{}).
 		Select("id, menu_id, name, code, sort, status, remark, created_at, updated_at").
@@ -363,7 +364,7 @@ func (s *Service) List(ctx context.Context, req *ListReq) (resp ListResp, err er
 	}
 	span.SetAttributes(attribute.Int("permission.count", len(items)))
 
-	return items, nil
+	return dto.NewPageResp(items, int64(len(items))), nil
 }
 
 // Detail 查询权限详情。

@@ -239,11 +239,11 @@ func TestServiceListReturnsAllMenuPermissionsInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if len(resp) != 2 || resp[0].ID != permissionB.ID || resp[1].ID != permissionA.ID {
+	if resp.Total != 2 || len(resp.List) != 2 || resp.List[0].ID != permissionB.ID || resp.List[1].ID != permissionA.ID {
 		t.Fatalf("List() = %#v, want permissions ordered by sort", resp)
 	}
-	if resp[1].Status == nil || *resp[1].Status != 0 {
-		t.Fatalf("List() disabled permission = %#v", resp[1])
+	if resp.List[1].Status == nil || *resp.List[1].Status != 0 {
+		t.Fatalf("List() disabled permission = %#v", resp.List[1])
 	}
 }
 
@@ -255,8 +255,8 @@ func TestServiceListReturnsEmptyArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if resp == nil || len(resp) != 0 {
-		t.Fatalf("List() = %#v, want empty non-nil array", resp)
+	if resp == nil || resp.Total != 0 || resp.List == nil || len(resp.List) != 0 {
+		t.Fatalf("List() = %#v, want empty page response", resp)
 	}
 }
 

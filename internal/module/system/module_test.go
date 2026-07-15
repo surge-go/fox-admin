@@ -109,7 +109,7 @@ func TestRegisterRoutesRegistersSystemRoutes(t *testing.T) {
 	permissionListReq := httptest.NewRequest(http.MethodGet, "/api/v1/system/permission/list?menu_id="+strconv.FormatInt(permissionMenu.ID, 10), nil)
 	permissionListRec := httptest.NewRecorder()
 	engine.ServeHTTP(permissionListRec, permissionListReq)
-	if permissionListRec.Code != http.StatusOK || !strings.Contains(permissionListRec.Body.String(), `"code":200`) || !strings.Contains(permissionListRec.Body.String(), `"data":[]`) {
+	if permissionListRec.Code != http.StatusOK || !strings.Contains(permissionListRec.Body.String(), `"code":200`) || !strings.Contains(permissionListRec.Body.String(), `"list":[]`) || !strings.Contains(permissionListRec.Body.String(), `"total":0`) {
 		t.Fatalf("permission list status = %d; body = %s", permissionListRec.Code, permissionListRec.Body.String())
 	}
 }

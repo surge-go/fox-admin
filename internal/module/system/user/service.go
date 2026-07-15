@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"fox-admin/internal/dto"
 	"fox-admin/internal/errcode"
 	"fox-admin/internal/module/system/entity"
 	"fox-admin/internal/module/system/enum"
@@ -640,7 +641,7 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) (err error) {
 }
 
 // List 查询用户列表。
-func (s *Service) List(ctx context.Context, req *ListReq) (resp *ListResp, err error) {
+func (s *Service) List(ctx context.Context, req *ListReq) (resp *dto.PageResp[*ListItemResp], err error) {
 	ctx, span := tracer.Start(ctx, "system.user.List")
 	span.SetAttributes(
 		attribute.String("system.module", "user"),
@@ -761,10 +762,7 @@ func (s *Service) List(ctx context.Context, req *ListReq) (resp *ListResp, err e
 		items = append(items, item)
 	}
 
-	return &ListResp{
-		Total: total,
-		List:  items,
-	}, nil
+	return dto.NewPageResp(items, total), nil
 }
 
 // Detail 查询用户详情。

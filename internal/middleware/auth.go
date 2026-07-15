@@ -21,6 +21,8 @@ const (
 	DefaultAccessHeaderName = "Authorization"
 	// DefaultRefreshHeaderName 表示默认 refresh token 请求头。
 	DefaultRefreshHeaderName = "X-Refresh-Token"
+	// DefaultDeviceIDHeaderName 表示默认登录设备 ID 请求头。
+	DefaultDeviceIDHeaderName = "X-Device-ID"
 	// DefaultAccessResponseHeaderName 表示默认新 access token 响应头。
 	DefaultAccessResponseHeaderName = "X-Access-Token"
 	// DefaultRefreshResponseHeaderName 表示默认新 refresh token 响应头。
@@ -207,6 +209,7 @@ func mapAuthError(err error) error {
 	switch {
 	case errors.Is(err, auth.ErrTokenRequired),
 		errors.Is(err, auth.ErrTokenMalformed),
+		errors.Is(err, auth.ErrInvalidSignature),
 		errors.Is(err, auth.ErrSessionNotFound),
 		errors.Is(err, auth.ErrRefreshTokenInvalid),
 		errors.Is(err, auth.ErrRefreshTokenReused):
