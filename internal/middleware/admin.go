@@ -1,8 +1,7 @@
-package access
+package middleware
 
 import (
 	"fox-admin/internal/errcode"
-	"fox-admin/internal/middleware"
 	"fox-admin/internal/module/system/entity"
 	"fox-admin/internal/module/system/enum"
 	authcore "fox-admin/pkg/auth"
@@ -24,7 +23,7 @@ func AdminOnly(db *gorm.DB, logger *zap.Logger) fox.HandlerFunc {
 	}
 
 	return func(c *fox.Context) {
-		value, exists := c.Get(middleware.AuthClaimsKey)
+		value, exists := c.Get(AuthClaimsKey)
 		claims, ok := value.(*authcore.Claims)
 		if !exists || !ok || claims == nil || claims.SubjectID <= 0 || claims.SubjectType != authcore.SubjectAdmin {
 			c.Fail(errcode.ErrAuthForbidden)

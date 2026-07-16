@@ -1,4 +1,4 @@
-package access
+package middleware
 
 import (
 	"encoding/json"
@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"fox-admin/internal/errcode"
-	"fox-admin/internal/middleware"
 	"fox-admin/internal/module/system/entity"
 	"fox-admin/internal/module/system/enum"
 	authcore "fox-admin/pkg/auth"
@@ -33,7 +32,7 @@ func TestAdminOnlyProtectsLogManagementRoutes(t *testing.T) {
 		if c.GetHeader("X-Test-Role") == "admin" {
 			userID = adminID
 		}
-		c.Set(middleware.AuthClaimsKey, &authcore.Claims{SubjectID: userID, SubjectType: authcore.SubjectAdmin})
+		c.Set(AuthClaimsKey, &authcore.Claims{SubjectID: userID, SubjectType: authcore.SubjectAdmin})
 		c.Next()
 	})
 	logs := engine.Group("/logs", AdminOnly(db, zap.NewNop()))
@@ -78,7 +77,7 @@ func TestAdminOnlyRejectsDisabledAndDeletedAdminRole(t *testing.T) {
 func newAccessTestEngine(db *gorm.DB, userID int64) *fox.Engine {
 	engine := fox.New(&fox.Config{Addr: ":0", Mode: fox.ModeTest, PrintRoutes: ptr.Of(false)})
 	engine.Use(func(c *fox.Context) {
-		c.Set(middleware.AuthClaimsKey, &authcore.Claims{SubjectID: userID, SubjectType: authcore.SubjectAdmin})
+		c.Set(AuthClaimsKey, &authcore.Claims{SubjectID: userID, SubjectType: authcore.SubjectAdmin})
 		c.Next()
 	})
 	engine.GET("/logs", AdminOnly(db, zap.NewNop()), func(c *fox.Context) { c.Ok(nil) })

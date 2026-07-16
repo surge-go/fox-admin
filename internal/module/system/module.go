@@ -1,7 +1,7 @@
 package system
 
 import (
-	"fox-admin/internal/module/system/access"
+	"fox-admin/internal/middleware"
 	systemauth "fox-admin/internal/module/system/auth"
 	"fox-admin/internal/module/system/config"
 	"fox-admin/internal/module/system/dept"
@@ -41,7 +41,7 @@ func RegisterRoutes(group *fox.RouteGroup, db *gorm.DB, manager *authcore.Manage
 	operLogService := operlog.NewService(db, logger)
 	operLogRecorder := operlog.NewRecorder(operLogService, logger)
 	systemGroup.Use(operlog.Audit(operLogRecorder, logger))
-	adminOnly := access.AdminOnly(db, logger)
+	adminOnly := middleware.AdminOnly(db, logger)
 	operlog.NewHandler(operLogService, logger).RegisterRoutes(systemGroup, adminOnly)
 
 	// 注册登录日志模块，并将记录服务注入认证模块。

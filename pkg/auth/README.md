@@ -371,7 +371,7 @@ func (auditHandler) HandleAuthEvent(ctx context.Context, event auth.Event) error
 
 ## HTTP 层接入建议
 
-> **状态：接入计划，未完成**。当前 `cmd/fox-admin/main.go` 仍未把 `pkg/auth.Manager` 装配到全局，也未挂载鉴权中间件；`desc/api.md` 已显式标注"系统接口暂不要求 Authorization"。`internal/middleware/auth.go` 已经按下面方案实现，但需要 main.go 在分组路由前显式调用 `app.Engine().Use(middleware.Auth(manager))`。
+> **状态：已接入**。`cmd/fox-admin/main.go` 已在 `/api/v1` 路由组挂载鉴权中间件，并仅跳过登录和刷新接口。
 
 接入方案：
 
