@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const defaultGender = 0
@@ -227,16 +228,8 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) (err error) {
 			}
 		}
 
-		// 可选部门存在时必须能查到真实部门，避免用户挂到不存在的部门。
-		if req.DeptID != nil {
-			var deptCount int64
-			if err = tx.Model(&entity.Dept{}).Where("id = ?", *req.DeptID).Count(&deptCount).Error; err != nil {
-				logger.Error("创建用户失败：查询部门失败", zap.String("username", username), zap.Int64("dept_id", *req.DeptID), zap.Error(err))
-				return errcode.ErrUserDeptQueryFailed.WithErr(err)
-			}
-			if deptCount == 0 {
-				return errcode.ErrUserDeptNotFound
-			}
+		if err = s.validateActiveDept(tx, req.DeptID); err != nil {
+			return err
 		}
 
 		// 绑定角色数量必须与请求去重后的角色数量一致，否则说明存在无效角色 ID。
@@ -251,16 +244,8 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) (err error) {
 			}
 		}
 
-		// 绑定岗位数量必须与请求去重后的岗位数量一致，否则说明存在无效岗位 ID。
-		if len(postIDs) > 0 {
-			var postCount int64
-			if err = tx.Model(&entity.Post{}).Where("id IN ?", postIDs).Count(&postCount).Error; err != nil {
-				logger.Error("创建用户失败：查询岗位失败", zap.String("username", username), zap.Int64s("post_ids", postIDs), zap.Error(err))
-				return errcode.ErrUserPostQueryFailed.WithErr(err)
-			}
-			if postCount != int64(len(postIDs)) {
-				return errcode.ErrUserPostNotFound
-			}
+		if err = s.validateActivePosts(tx, postIDs); err != nil {
+			return err
 		}
 
 		// 先创建用户主表记录，拿到自增 ID 后再写关联表。
@@ -547,15 +532,8 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) (err error) {
 			}
 		}
 
-		if req.DeptID != nil {
-			var deptCount int64
-			if err := tx.Model(&entity.Dept{}).Where("id = ?", *req.DeptID).Count(&deptCount).Error; err != nil {
-				logger.Error("更新用户失败：查询部门失败", zap.Int64("user_id", req.ID), zap.Int64("dept_id", *req.DeptID), zap.Error(err))
-				return errcode.ErrUserDeptQueryFailed.WithErr(err)
-			}
-			if deptCount == 0 {
-				return errcode.ErrUserDeptNotFound
-			}
+		if err := s.validateActiveDept(tx, req.DeptID); err != nil {
+			return err
 		}
 
 		if len(roleIDs) > 0 {
@@ -569,15 +547,8 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) (err error) {
 			}
 		}
 
-		if len(postIDs) > 0 {
-			var postCount int64
-			if err := tx.Model(&entity.Post{}).Where("id IN ?", postIDs).Count(&postCount).Error; err != nil {
-				logger.Error("更新用户失败：查询岗位失败", zap.Int64("user_id", req.ID), zap.Int64s("post_ids", postIDs), zap.Error(err))
-				return errcode.ErrUserPostQueryFailed.WithErr(err)
-			}
-			if postCount != int64(len(postIDs)) {
-				return errcode.ErrUserPostNotFound
-			}
+		if err := s.validateActivePosts(tx, postIDs); err != nil {
+			return err
 		}
 
 		updates := map[string]any{
@@ -1069,4 +1040,51 @@ func (s *Service) AssignRoles(ctx context.Context, req *AssignRolesReq) (err err
 		}
 		return s.revokeUserSessions(ctx, []int64{req.ID})
 	})
+}
+
+// validateActiveDept 锁定并校验用户所属部门存在且启用。
+func (s *Service) validateActiveDept(tx *gorm.DB, deptID *int64) error {
+	if deptID == nil {
+		return nil
+	}
+	var dept entity.Dept
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Select("id", "status").
+		Where("id = ?", *deptID).
+		Take(&dept).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errcode.ErrUserDeptNotFound
+		}
+		s.logger.Error("校验用户部门失败：查询部门失败", zap.Int64("dept_id", *deptID), zap.Error(err))
+		return errcode.ErrUserDeptQueryFailed.WithErr(err)
+	}
+	if dept.Status == nil || *dept.Status != enum.StatusEnabled {
+		return errcode.ErrUserDeptDisabled
+	}
+	return nil
+}
+
+// validateActivePosts 锁定并校验用户绑定岗位全部存在且启用。
+func (s *Service) validateActivePosts(tx *gorm.DB, postIDs []int64) error {
+	if len(postIDs) == 0 {
+		return nil
+	}
+	var posts []entity.Post
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Select("id", "status").
+		Where("id IN ?", postIDs).
+		Order("id ASC").
+		Find(&posts).Error; err != nil {
+		s.logger.Error("校验用户岗位失败：查询岗位失败", zap.Int64s("post_ids", postIDs), zap.Error(err))
+		return errcode.ErrUserPostQueryFailed.WithErr(err)
+	}
+	if len(posts) != len(postIDs) {
+		return errcode.ErrUserPostNotFound
+	}
+	for i := range posts {
+		if posts[i].Status == nil || *posts[i].Status != enum.StatusEnabled {
+			return errcode.ErrUserPostDisabled
+		}
+	}
+	return nil
 }

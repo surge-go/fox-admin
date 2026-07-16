@@ -238,6 +238,28 @@ func TestServiceCreateRejectsDuplicateAndMissingRelations(t *testing.T) {
 	}
 }
 
+func TestServiceCreateRejectsDisabledDepartmentAndPost(t *testing.T) {
+	service := newTestService(t)
+	disabled := enum.StatusDisabled
+	dept := createTestDept(t, service.db, "停用部门")
+	post := createTestPost(t, service.db, "停用岗位", "disabled-post")
+	if err := service.db.Model(dept).Update("status", disabled).Error; err != nil {
+		t.Fatalf("disable department: %v", err)
+	}
+	if err := service.db.Model(post).Update("status", disabled).Error; err != nil {
+		t.Fatalf("disable post: %v", err)
+	}
+
+	err := service.Create(context.Background(), &CreateReq{Username: "dept-user", Password: "password", DeptID: &dept.ID})
+	if !foxerrors.IsCode(err, errcode.ErrUserDeptDisabled.Code) {
+		t.Fatalf("Create() disabled dept error = %v, want code %d", err, errcode.ErrUserDeptDisabled.Code)
+	}
+	err = service.Create(context.Background(), &CreateReq{Username: "post-user", Password: "password", PostIDs: []int64{post.ID}})
+	if !foxerrors.IsCode(err, errcode.ErrUserPostDisabled.Code) {
+		t.Fatalf("Create() disabled post error = %v, want code %d", err, errcode.ErrUserPostDisabled.Code)
+	}
+}
+
 func TestServiceDeleteRemovesBindingsAndSoftDeletesUsers(t *testing.T) {
 	service := newTestService(t)
 	role := createTestRole(t, service.db, "管理员", "admin")

@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var tracer = otel.Tracer("fox-admin/internal/module/system/role")
@@ -267,16 +268,8 @@ func (s *Service) Create(ctx context.Context, req *CreateReq) (err error) {
 			return err
 		}
 
-		// custom 数据权限的部门绑定必须全部真实存在，避免角色获得不可解释的数据范围。
-		if len(deptIDs) > 0 {
-			var deptCount int64
-			if err := tx.Model(&entity.Dept{}).Where("id IN ?", deptIDs).Count(&deptCount).Error; err != nil {
-				logger.Error("创建角色失败：查询部门失败", zap.String("code", code), zap.Int64s("dept_ids", deptIDs), zap.Error(err))
-				return errcode.ErrRoleDeptQueryFailed.WithErr(err)
-			}
-			if deptCount != int64(len(deptIDs)) {
-				return errcode.ErrRoleDeptNotFound
-			}
+		if err := s.validateActiveDepts(tx, deptIDs); err != nil {
+			return err
 		}
 
 		// 先创建角色主表记录，拿到自增 ID 后再写菜单和部门关联表。
@@ -530,15 +523,8 @@ func (s *Service) Update(ctx context.Context, req *UpdateReq) (err error) {
 			return err
 		}
 
-		if len(deptIDs) > 0 {
-			var deptCount int64
-			if err := tx.Model(&entity.Dept{}).Where("id IN ?", deptIDs).Count(&deptCount).Error; err != nil {
-				logger.Error("更新角色失败：查询部门失败", zap.Int64("role_id", req.ID), zap.Int64s("dept_ids", deptIDs), zap.Error(err))
-				return errcode.ErrRoleDeptQueryFailed.WithErr(err)
-			}
-			if deptCount != int64(len(deptIDs)) {
-				return errcode.ErrRoleDeptNotFound
-			}
+		if err := s.validateActiveDepts(tx, deptIDs); err != nil {
+			return err
 		}
 
 		updates := map[string]any{
@@ -1004,15 +990,8 @@ func (s *Service) AssignDepts(ctx context.Context, req *AssignDeptsReq) (err err
 			return errcode.ErrRoleNotFound
 		}
 
-		if len(deptIDs) > 0 {
-			var deptCount int64
-			if err := tx.Model(&entity.Dept{}).Where("id IN ?", deptIDs).Count(&deptCount).Error; err != nil {
-				logger.Error("分配角色数据权限部门失败：查询部门失败", zap.Int64("role_id", req.ID), zap.Int64s("dept_ids", deptIDs), zap.Error(err))
-				return errcode.ErrRoleDeptQueryFailed.WithErr(err)
-			}
-			if deptCount != int64(len(deptIDs)) {
-				return errcode.ErrRoleDeptNotFound
-			}
+		if err := s.validateActiveDepts(tx, deptIDs); err != nil {
+			return err
 		}
 
 		if err := tx.Model(&entity.Role{}).Where("id = ?", req.ID).Updates(map[string]any{
@@ -1041,4 +1020,29 @@ func (s *Service) AssignDepts(ctx context.Context, req *AssignDeptsReq) (err err
 		}
 		return nil
 	})
+}
+
+// validateActiveDepts 锁定并校验角色数据权限部门全部存在且启用。
+func (s *Service) validateActiveDepts(tx *gorm.DB, deptIDs []int64) error {
+	if len(deptIDs) == 0 {
+		return nil
+	}
+	var depts []entity.Dept
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Select("id", "status").
+		Where("id IN ?", deptIDs).
+		Order("id ASC").
+		Find(&depts).Error; err != nil {
+		s.logger.Error("校验角色部门失败：查询部门失败", zap.Int64s("dept_ids", deptIDs), zap.Error(err))
+		return errcode.ErrRoleDeptQueryFailed.WithErr(err)
+	}
+	if len(depts) != len(deptIDs) {
+		return errcode.ErrRoleDeptNotFound
+	}
+	for i := range depts {
+		if depts[i].Status == nil || *depts[i].Status != enum.StatusEnabled {
+			return errcode.ErrRoleDeptDisabled
+		}
+	}
+	return nil
 }

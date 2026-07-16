@@ -331,4 +331,130 @@ var (
 	ErrRoleMenuAncestorRequired = errors.NewWithStatus(1164, http.StatusOK, "子菜单的父菜单必须同时分配给角色")
 	// ErrUserSessionRevokeFailed 表示吊销用户登录会话失败。
 	ErrUserSessionRevokeFailed = errors.NewWithStatus(1165, http.StatusInternalServerError, "吊销用户登录会话失败")
+	// ErrDeptCreateReqNil 表示创建部门请求参数为空。
+	ErrDeptCreateReqNil = errors.NewWithStatus(1166, http.StatusOK, "创建部门参数不能为空")
+	// ErrDeptParentIDInvalid 表示父部门 ID 非法。
+	ErrDeptParentIDInvalid = errors.NewWithStatus(1167, http.StatusOK, "父部门 ID 不能小于 0")
+	// ErrDeptNameRequired 表示部门名称为空。
+	ErrDeptNameRequired = errors.NewWithStatus(1168, http.StatusOK, "部门名称不能为空")
+	// ErrDeptLeaderIDInvalid 表示部门负责人 ID 非法。
+	ErrDeptLeaderIDInvalid = errors.NewWithStatus(1169, http.StatusOK, "部门负责人 ID 必须大于 0")
+	// ErrDeptSortInvalid 表示部门排序值非法。
+	ErrDeptSortInvalid = errors.NewWithStatus(1170, http.StatusOK, "部门排序不能小于 0")
+	// ErrDeptStatusInvalid 表示部门状态非法。
+	ErrDeptStatusInvalid = errors.NewWithStatus(1171, http.StatusOK, "部门状态只能是 0 或 1")
+	// ErrDeptParentNotFound 表示父部门不存在。
+	ErrDeptParentNotFound = errors.NewWithStatus(1172, http.StatusOK, "父部门不存在")
+	// ErrDeptNameExists 表示同级部门名称已存在。
+	ErrDeptNameExists = errors.NewWithStatus(1173, http.StatusOK, "同级部门名称已存在")
+	// ErrDeptCodeExists 表示部门编码已存在。
+	ErrDeptCodeExists = errors.NewWithStatus(1174, http.StatusOK, "部门编码已存在")
+	// ErrDeptLeaderNotFound 表示部门负责人不存在。
+	ErrDeptLeaderNotFound = errors.NewWithStatus(1175, http.StatusOK, "部门负责人不存在")
+	// ErrDeptParentQueryFailed 表示查询父部门失败。
+	ErrDeptParentQueryFailed = errors.NewWithStatus(1176, http.StatusInternalServerError, "查询父部门失败")
+	// ErrDeptNameQueryFailed 表示查询部门名称失败。
+	ErrDeptNameQueryFailed = errors.NewWithStatus(1177, http.StatusInternalServerError, "查询部门名称失败")
+	// ErrDeptCodeQueryFailed 表示查询部门编码失败。
+	ErrDeptCodeQueryFailed = errors.NewWithStatus(1178, http.StatusInternalServerError, "查询部门编码失败")
+	// ErrDeptLeaderQueryFailed 表示查询部门负责人失败。
+	ErrDeptLeaderQueryFailed = errors.NewWithStatus(1179, http.StatusInternalServerError, "查询部门负责人失败")
+	// ErrDeptCreateFailed 表示创建部门失败。
+	ErrDeptCreateFailed = errors.NewWithStatus(1180, http.StatusInternalServerError, "创建部门失败")
+	// ErrDeptDeleteReqNil 表示删除部门请求参数为空。
+	ErrDeptDeleteReqNil = errors.NewWithStatus(1181, http.StatusOK, "删除部门参数不能为空")
+	// ErrDeptIDInvalid 表示部门 ID 非法。
+	ErrDeptIDInvalid = errors.NewWithStatus(1182, http.StatusOK, "部门 ID 必须大于 0")
+	// ErrDeptNotFound 表示部门不存在。
+	ErrDeptNotFound = errors.NewWithStatus(1183, http.StatusOK, "部门不存在")
+	// ErrDeptHasChildren 表示部门存在子部门。
+	ErrDeptHasChildren = errors.NewWithStatus(1184, http.StatusOK, "部门存在子部门，不能删除")
+	// ErrDeptHasUsers 表示部门存在直属用户。
+	ErrDeptHasUsers = errors.NewWithStatus(1185, http.StatusOK, "部门存在直属用户，不能删除")
+	// ErrDeptHasRoleBinding 表示部门已绑定角色数据权限。
+	ErrDeptHasRoleBinding = errors.NewWithStatus(1186, http.StatusOK, "部门已绑定角色数据权限，不能删除")
+	// ErrDeptQueryFailed 表示查询部门失败。
+	ErrDeptQueryFailed = errors.NewWithStatus(1187, http.StatusInternalServerError, "查询部门失败")
+	// ErrDeptChildrenQueryFailed 表示查询子部门失败。
+	ErrDeptChildrenQueryFailed = errors.NewWithStatus(1188, http.StatusInternalServerError, "查询子部门失败")
+	// ErrDeptUserBindingQueryFailed 表示查询部门用户绑定失败。
+	ErrDeptUserBindingQueryFailed = errors.NewWithStatus(1189, http.StatusInternalServerError, "查询部门用户绑定失败")
+	// ErrDeptRoleBindingQueryFailed 表示查询部门角色绑定失败。
+	ErrDeptRoleBindingQueryFailed = errors.NewWithStatus(1190, http.StatusInternalServerError, "查询部门角色绑定失败")
+	// ErrDeptDeleteFailed 表示删除部门失败。
+	ErrDeptDeleteFailed = errors.NewWithStatus(1191, http.StatusInternalServerError, "删除部门失败")
+	// ErrDeptUpdateReqNil 表示更新部门请求参数为空。
+	ErrDeptUpdateReqNil = errors.NewWithStatus(1192, http.StatusOK, "更新部门参数不能为空")
+	// ErrDeptParentSelf 表示父部门不能是自己。
+	ErrDeptParentSelf = errors.NewWithStatus(1193, http.StatusOK, "父部门不能是当前部门")
+	// ErrDeptParentDescendant 表示父部门不能是当前部门的子孙部门。
+	ErrDeptParentDescendant = errors.NewWithStatus(1194, http.StatusOK, "父部门不能是当前部门的子孙部门")
+	// ErrDeptUpdateFailed 表示更新部门失败。
+	ErrDeptUpdateFailed = errors.NewWithStatus(1195, http.StatusInternalServerError, "更新部门失败")
+	// ErrDeptTreeQueryFailed 表示查询部门树失败。
+	ErrDeptTreeQueryFailed = errors.NewWithStatus(1196, http.StatusInternalServerError, "查询部门树失败")
+	// ErrDeptOptionsQueryFailed 表示查询部门选项失败。
+	ErrDeptOptionsQueryFailed = errors.NewWithStatus(1197, http.StatusInternalServerError, "查询部门选项失败")
+	// ErrDeptDetailReqNil 表示查询部门详情请求参数为空。
+	ErrDeptDetailReqNil = errors.NewWithStatus(1198, http.StatusOK, "查询部门详情参数不能为空")
+	// ErrDeptUpdateStatusReqNil 表示更新部门状态请求参数为空。
+	ErrDeptUpdateStatusReqNil = errors.NewWithStatus(1199, http.StatusOK, "更新部门状态参数不能为空")
+	// ErrDeptIDsRequired 表示部门 ID 集合为空。
+	ErrDeptIDsRequired = errors.NewWithStatus(1200, http.StatusOK, "部门 ID 集合不能为空")
+	// ErrDeptUpdateStatusFailed 表示更新部门状态失败。
+	ErrDeptUpdateStatusFailed = errors.NewWithStatus(1201, http.StatusInternalServerError, "更新部门状态失败")
+	// ErrPostCreateReqNil 表示创建岗位请求参数为空。
+	ErrPostCreateReqNil = errors.NewWithStatus(1202, http.StatusOK, "创建岗位参数不能为空")
+	// ErrPostNameRequired 表示岗位名称为空。
+	ErrPostNameRequired = errors.NewWithStatus(1203, http.StatusOK, "岗位名称不能为空")
+	// ErrPostCodeRequired 表示岗位编码为空。
+	ErrPostCodeRequired = errors.NewWithStatus(1204, http.StatusOK, "岗位编码不能为空")
+	// ErrPostSortInvalid 表示岗位排序值非法。
+	ErrPostSortInvalid = errors.NewWithStatus(1205, http.StatusOK, "岗位排序不能小于 0")
+	// ErrPostStatusInvalid 表示岗位状态非法。
+	ErrPostStatusInvalid = errors.NewWithStatus(1206, http.StatusOK, "岗位状态只能是 0 或 1")
+	// ErrPostNameExists 表示岗位名称已存在。
+	ErrPostNameExists = errors.NewWithStatus(1207, http.StatusOK, "岗位名称已存在")
+	// ErrPostCodeExists 表示岗位编码已存在。
+	ErrPostCodeExists = errors.NewWithStatus(1208, http.StatusOK, "岗位编码已存在")
+	// ErrPostNameQueryFailed 表示查询岗位名称失败。
+	ErrPostNameQueryFailed = errors.NewWithStatus(1209, http.StatusInternalServerError, "查询岗位名称失败")
+	// ErrPostCodeQueryFailed 表示查询岗位编码失败。
+	ErrPostCodeQueryFailed = errors.NewWithStatus(1210, http.StatusInternalServerError, "查询岗位编码失败")
+	// ErrPostCreateFailed 表示创建岗位失败。
+	ErrPostCreateFailed = errors.NewWithStatus(1211, http.StatusInternalServerError, "创建岗位失败")
+	// ErrPostDeleteReqNil 表示删除岗位请求参数为空。
+	ErrPostDeleteReqNil = errors.NewWithStatus(1212, http.StatusOK, "删除岗位参数不能为空")
+	// ErrPostIDInvalid 表示岗位 ID 非法。
+	ErrPostIDInvalid = errors.NewWithStatus(1213, http.StatusOK, "岗位 ID 必须大于 0")
+	// ErrPostIDsRequired 表示岗位 ID 集合为空。
+	ErrPostIDsRequired = errors.NewWithStatus(1214, http.StatusOK, "岗位 ID 集合不能为空")
+	// ErrPostNotFound 表示岗位不存在。
+	ErrPostNotFound = errors.NewWithStatus(1215, http.StatusOK, "岗位不存在")
+	// ErrPostHasUserBinding 表示岗位已绑定用户。
+	ErrPostHasUserBinding = errors.NewWithStatus(1216, http.StatusOK, "岗位已绑定用户，不能删除")
+	// ErrPostQueryFailed 表示查询岗位失败。
+	ErrPostQueryFailed = errors.NewWithStatus(1217, http.StatusInternalServerError, "查询岗位失败")
+	// ErrPostUserBindingQueryFailed 表示查询岗位用户绑定失败。
+	ErrPostUserBindingQueryFailed = errors.NewWithStatus(1218, http.StatusInternalServerError, "查询岗位用户绑定失败")
+	// ErrPostDeleteFailed 表示删除岗位失败。
+	ErrPostDeleteFailed = errors.NewWithStatus(1219, http.StatusInternalServerError, "删除岗位失败")
+	// ErrPostUpdateReqNil 表示更新岗位请求参数为空。
+	ErrPostUpdateReqNil = errors.NewWithStatus(1220, http.StatusOK, "更新岗位参数不能为空")
+	// ErrPostUpdateFailed 表示更新岗位失败。
+	ErrPostUpdateFailed = errors.NewWithStatus(1221, http.StatusInternalServerError, "更新岗位失败")
+	// ErrPostListQueryFailed 表示查询岗位列表失败。
+	ErrPostListQueryFailed = errors.NewWithStatus(1222, http.StatusInternalServerError, "查询岗位列表失败")
+	// ErrPostDetailReqNil 表示查询岗位详情请求参数为空。
+	ErrPostDetailReqNil = errors.NewWithStatus(1223, http.StatusOK, "查询岗位详情参数不能为空")
+	// ErrPostUpdateStatusReqNil 表示更新岗位状态请求参数为空。
+	ErrPostUpdateStatusReqNil = errors.NewWithStatus(1224, http.StatusOK, "更新岗位状态参数不能为空")
+	// ErrPostUpdateStatusFailed 表示更新岗位状态失败。
+	ErrPostUpdateStatusFailed = errors.NewWithStatus(1225, http.StatusInternalServerError, "更新岗位状态失败")
+	// ErrUserDeptDisabled 表示用户不能绑定禁用部门。
+	ErrUserDeptDisabled = errors.NewWithStatus(1226, http.StatusOK, "用户不能绑定禁用部门")
+	// ErrUserPostDisabled 表示用户不能绑定禁用岗位。
+	ErrUserPostDisabled = errors.NewWithStatus(1227, http.StatusOK, "用户不能绑定禁用岗位")
+	// ErrRoleDeptDisabled 表示角色不能绑定禁用部门。
+	ErrRoleDeptDisabled = errors.NewWithStatus(1228, http.StatusOK, "角色不能绑定禁用部门")
 )

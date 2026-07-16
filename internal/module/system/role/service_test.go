@@ -216,6 +216,25 @@ func TestServiceCreateRejectsDuplicateAndMissingRelations(t *testing.T) {
 	}
 }
 
+func TestServiceCreateRejectsDisabledDepartment(t *testing.T) {
+	service := newTestService(t)
+	dept := createTestDept(t, service.db, "停用部门")
+	disabled := enum.StatusDisabled
+	if err := service.db.Model(dept).Update("status", disabled).Error; err != nil {
+		t.Fatalf("disable department: %v", err)
+	}
+
+	err := service.Create(context.Background(), &CreateReq{
+		Name:      "数据管理员",
+		Code:      "data-admin",
+		DataScope: ptrOf(enum.DataScopeCustom),
+		DeptIDs:   []int64{dept.ID},
+	})
+	if !foxerrors.IsCode(err, errcode.ErrRoleDeptDisabled.Code) {
+		t.Fatalf("Create() disabled dept error = %v, want code %d", err, errcode.ErrRoleDeptDisabled.Code)
+	}
+}
+
 func TestServiceDeleteRemovesBindingsAndSoftDeletesRoles(t *testing.T) {
 	service := newTestService(t)
 	menu := createTestMenu(t, service.db, "system:user")
