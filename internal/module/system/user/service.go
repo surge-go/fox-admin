@@ -1042,6 +1042,72 @@ func (s *Service) AssignRoles(ctx context.Context, req *AssignRolesReq) (err err
 	})
 }
 
+// AssignPosts 分配用户岗位。
+func (s *Service) AssignPosts(ctx context.Context, req *AssignPostsReq) (err error) {
+	ctx, span := tracer.Start(ctx, "system.user.AssignPosts")
+	span.SetAttributes(
+		attribute.String("system.module", "user"),
+		attribute.String("system.operation", "assign_posts"),
+	)
+	defer func() {
+		tracing.FinishSpan(span, err)
+	}()
+
+	if req == nil {
+		return errcode.ErrUserAssignPostsReqNil
+	}
+	if req.ID <= 0 {
+		return errcode.ErrUserIDInvalid
+	}
+	span.SetAttributes(attribute.Int64("user.id", req.ID))
+
+	postIDs := make([]int64, 0, len(req.PostIDs))
+	seen := make(map[int64]struct{}, len(req.PostIDs))
+	for _, id := range req.PostIDs {
+		if id <= 0 {
+			return errcode.ErrUserPostIDInvalid
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		postIDs = append(postIDs, id)
+	}
+	span.SetAttributes(attribute.Int("user.post_count", len(postIDs)))
+
+	userPostTable := entity.UserPost{}.TableName()
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var user entity.User
+		if queryErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("id").Where("id = ?", req.ID).Take(&user).Error; queryErr != nil {
+			if errors.Is(queryErr, gorm.ErrRecordNotFound) {
+				return errcode.ErrUserNotFound
+			}
+			s.logger.Error("分配用户岗位失败：查询用户失败", zap.Int64("user_id", req.ID), zap.Error(queryErr))
+			return errcode.ErrUserQueryFailed.WithErr(queryErr)
+		}
+
+		if validateErr := s.validateActivePosts(tx, postIDs); validateErr != nil {
+			return validateErr
+		}
+		if deleteErr := tx.Table(userPostTable).Where("user_id = ?", req.ID).Delete(&entity.UserPost{}).Error; deleteErr != nil {
+			s.logger.Error("分配用户岗位失败：删除用户岗位失败", zap.Int64("user_id", req.ID), zap.Error(deleteErr))
+			return errcode.ErrUserAssignPostsFailed.WithErr(deleteErr)
+		}
+		if len(postIDs) > 0 {
+			userPosts := make([]entity.UserPost, 0, len(postIDs))
+			for _, postID := range postIDs {
+				userPosts = append(userPosts, entity.UserPost{UserID: req.ID, PostID: postID})
+			}
+			if createErr := tx.Table(userPostTable).Create(&userPosts).Error; createErr != nil {
+				s.logger.Error("分配用户岗位失败：写入用户岗位失败", zap.Int64("user_id", req.ID), zap.Int64s("post_ids", postIDs), zap.Error(createErr))
+				return errcode.ErrUserAssignPostsFailed.WithErr(createErr)
+			}
+		}
+		return s.revokeUserSessions(ctx, []int64{req.ID})
+	})
+}
+
 // validateActiveDept 锁定并校验用户所属部门存在且启用。
 func (s *Service) validateActiveDept(tx *gorm.DB, deptID *int64) error {
 	if deptID == nil {

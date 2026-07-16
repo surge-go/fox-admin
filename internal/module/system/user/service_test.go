@@ -127,6 +127,9 @@ func TestServiceUsesTablePrefixForWrites(t *testing.T) {
 	if err := service.AssignRoles(context.Background(), &AssignRolesReq{ID: user.ID, RoleIDs: []int64{roleB.ID}}); err != nil {
 		t.Fatalf("AssignRoles() with table prefix error = %v", err)
 	}
+	if err := service.AssignPosts(context.Background(), &AssignPostsReq{ID: user.ID, PostIDs: []int64{post.ID}}); err != nil {
+		t.Fatalf("AssignPosts() with table prefix error = %v", err)
+	}
 	if err := service.Update(context.Background(), &UpdateReq{ID: user.ID, Username: "manager", RoleIDs: []int64{roleA.ID}}); err != nil {
 		t.Fatalf("Update() with table prefix error = %v", err)
 	}
@@ -1031,6 +1034,73 @@ func TestServiceAssignRolesRejectsInvalidRequest(t *testing.T) {
 	}
 }
 
+func TestServiceAssignPostsReplacesAndClearsUserPosts(t *testing.T) {
+	service := newTestService(t)
+	user := createTestUser(t, service.db, "admin")
+	oldPost := createTestPost(t, service.db, "旧岗位", "old-post")
+	postA := createTestPost(t, service.db, "开发", "developer")
+	postB := createTestPost(t, service.db, "审计", "auditor")
+	if err := service.db.Create(&entity.UserPost{UserID: user.ID, PostID: oldPost.ID}).Error; err != nil {
+		t.Fatalf("create old user post: %v", err)
+	}
+
+	if err := service.AssignPosts(context.Background(), &AssignPostsReq{
+		ID: user.ID, PostIDs: []int64{postB.ID, postA.ID, postA.ID},
+	}); err != nil {
+		t.Fatalf("AssignPosts() error = %v", err)
+	}
+	var postIDs []int64
+	if err := service.db.Model(&entity.UserPost{}).Where("user_id = ?", user.ID).Order("post_id ASC").Pluck("post_id", &postIDs).Error; err != nil {
+		t.Fatalf("query user posts: %v", err)
+	}
+	if !reflect.DeepEqual(postIDs, []int64{postA.ID, postB.ID}) {
+		t.Fatalf("postIDs = %#v, want [%d %d]", postIDs, postA.ID, postB.ID)
+	}
+
+	if err := service.AssignPosts(context.Background(), &AssignPostsReq{ID: user.ID}); err != nil {
+		t.Fatalf("AssignPosts() clear error = %v", err)
+	}
+	var count int64
+	if err := service.db.Model(&entity.UserPost{}).Where("user_id = ?", user.ID).Count(&count).Error; err != nil {
+		t.Fatalf("count user posts: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("user post count = %d, want 0", count)
+	}
+}
+
+func TestServiceAssignPostsRejectsInvalidRequest(t *testing.T) {
+	service := newTestService(t)
+	user := createTestUser(t, service.db, "admin")
+	disabledPost := createTestPost(t, service.db, "禁用岗位", "disabled-post")
+	disabled := enum.StatusDisabled
+	if err := service.db.Model(&entity.Post{}).Where("id = ?", disabledPost.ID).Update("status", disabled).Error; err != nil {
+		t.Fatalf("disable post: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		req  *AssignPostsReq
+		want int
+	}{
+		{name: "nil request", req: nil, want: errcode.ErrUserAssignPostsReqNil.Code},
+		{name: "invalid user id", req: &AssignPostsReq{}, want: errcode.ErrUserIDInvalid.Code},
+		{name: "invalid post id", req: &AssignPostsReq{ID: user.ID, PostIDs: []int64{0}}, want: errcode.ErrUserPostIDInvalid.Code},
+		{name: "missing user", req: &AssignPostsReq{ID: 999}, want: errcode.ErrUserNotFound.Code},
+		{name: "missing post", req: &AssignPostsReq{ID: user.ID, PostIDs: []int64{999}}, want: errcode.ErrUserPostNotFound.Code},
+		{name: "disabled post", req: &AssignPostsReq{ID: user.ID, PostIDs: []int64{disabledPost.ID}}, want: errcode.ErrUserPostDisabled.Code},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := service.AssignPosts(context.Background(), tt.req)
+			if !foxerrors.IsCode(err, tt.want) {
+				t.Fatalf("AssignPosts() error = %v, want code %d", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestSecurityMutationsRevokeUserSessions(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -1054,6 +1124,13 @@ func TestSecurityMutationsRevokeUserSessions(t *testing.T) {
 			mutate: func(t *testing.T, service *Service, user *entity.User) error {
 				role := createTestRole(t, service.db, "审计员", "audit")
 				return service.AssignRoles(context.Background(), &AssignRolesReq{ID: user.ID, RoleIDs: []int64{role.ID}})
+			},
+		},
+		{
+			name: "assign posts",
+			mutate: func(t *testing.T, service *Service, user *entity.User) error {
+				post := createTestPost(t, service.db, "开发", "developer")
+				return service.AssignPosts(context.Background(), &AssignPostsReq{ID: user.ID, PostIDs: []int64{post.ID}})
 			},
 		},
 		{

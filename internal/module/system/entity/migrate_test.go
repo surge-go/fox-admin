@@ -149,6 +149,50 @@ func TestMigrateCreatesPermissionColumns(t *testing.T) {
 	}
 }
 
+func TestMigrateCreatesLoginLogAuditColumns(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:system-login-log-columns?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := Migrate(db); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+	for _, column := range []string{
+		"request_id",
+		"trace_id",
+		"platform",
+		"device_id_hash",
+		"business_code",
+	} {
+		if !db.Migrator().HasColumn(&LoginLog{}, column) {
+			t.Fatalf("login log column %s was not migrated", column)
+		}
+	}
+}
+
+func TestMigrateCreatesOperLogAuditColumns(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:system-oper-log-columns?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := Migrate(db); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+	for _, column := range []string{
+		"request_id",
+		"trace_id",
+		"module",
+		"action",
+		"status_code",
+		"business_code",
+		"cost_millis",
+	} {
+		if !db.Migrator().HasColumn(&OperLog{}, column) {
+			t.Fatalf("operation log column %s was not migrated", column)
+		}
+	}
+}
+
 func TestMigrateRejectsNilDB(t *testing.T) {
 	err := Migrate(nil)
 	if err == nil {

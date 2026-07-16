@@ -140,6 +140,19 @@ func TestSeedCreatesDefaultSystemData(t *testing.T) {
 		t.Fatalf("admin role permission count = %d, want 1", rolePermissionCount)
 	}
 
+	var configs []entity.Config
+	if err := db.Order("config_key ASC").Find(&configs).Error; err != nil {
+		t.Fatalf("query configs: %v", err)
+	}
+	if len(configs) != 3 {
+		t.Fatalf("config count = %d, want 3", len(configs))
+	}
+	for i := range configs {
+		if !configs[i].IsBuiltin || configs[i].Group != "system" || configs[i].ValueType != "string" || configs[i].Status == nil || *configs[i].Status != 1 {
+			t.Fatalf("seeded config = %#v", configs[i])
+		}
+	}
+
 	var menuCount, roleMenuCount, permissionCount int64
 	if err := db.Model(&entity.Menu{}).Count(&menuCount).Error; err != nil {
 		t.Fatalf("count menus: %v", err)
@@ -160,11 +173,14 @@ func TestSeedIsIdempotent(t *testing.T) {
 	if err := Seed(db); err != nil {
 		t.Fatalf("Seed() first error = %v", err)
 	}
+	if err := db.Model(&entity.Config{}).Where("config_key = ?", "system.site_name").Update("config_value", "Customized Admin").Error; err != nil {
+		t.Fatalf("customize site name: %v", err)
+	}
 	if err := Seed(db); err != nil {
 		t.Fatalf("Seed() second error = %v", err)
 	}
 
-	var userCount, roleCount, menuCount, roleMenuCount, permissionCount, rolePermissionCount, userRoleCount int64
+	var userCount, roleCount, menuCount, roleMenuCount, permissionCount, rolePermissionCount, userRoleCount, configCount int64
 	if err := db.Model(&entity.User{}).Where("username = ?", "admin").Count(&userCount).Error; err != nil {
 		t.Fatalf("count users: %v", err)
 	}
@@ -186,10 +202,20 @@ func TestSeedIsIdempotent(t *testing.T) {
 	if err := db.Model(&entity.UserRole{}).Count(&userRoleCount).Error; err != nil {
 		t.Fatalf("count user roles: %v", err)
 	}
+	if err := db.Model(&entity.Config{}).Count(&configCount).Error; err != nil {
+		t.Fatalf("count configs: %v", err)
+	}
+	var siteName entity.Config
+	if err := db.Where("config_key = ?", "system.site_name").Take(&siteName).Error; err != nil {
+		t.Fatalf("query site name config: %v", err)
+	}
+	if siteName.Value != "Customized Admin" {
+		t.Fatalf("site name value = %q, want customized value", siteName.Value)
+	}
 	if userCount != 1 || roleCount != 1 || menuCount != 10 || roleMenuCount != 10 ||
-		permissionCount != 10 || rolePermissionCount != 10 || userRoleCount != 1 {
+		permissionCount != 10 || rolePermissionCount != 10 || userRoleCount != 1 || configCount != 3 {
 		t.Fatalf(
-			"counts after repeated seed = user:%d role:%d menu:%d role_menu:%d permission:%d role_permission:%d user_role:%d, want 1/1/10/10/10/10/1",
+			"counts after repeated seed = user:%d role:%d menu:%d role_menu:%d permission:%d role_permission:%d user_role:%d config:%d, want 1/1/10/10/10/10/1/3",
 			userCount,
 			roleCount,
 			menuCount,
@@ -197,6 +223,7 @@ func TestSeedIsIdempotent(t *testing.T) {
 			permissionCount,
 			rolePermissionCount,
 			userRoleCount,
+			configCount,
 		)
 	}
 }

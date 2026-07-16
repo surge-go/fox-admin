@@ -6,14 +6,17 @@ import (
 	"encoding/hex"
 	"errors"
 	"strings"
+	"time"
 
 	"fox-admin/internal/errcode"
 	"fox-admin/internal/module/system/entity"
 	"fox-admin/internal/module/system/enum"
+	"fox-admin/internal/module/system/loginlog"
 	"fox-admin/internal/observability/tracing"
 	authcore "fox-admin/pkg/auth"
 	"fox-admin/pkg/ptr"
 
+	foxerrors "github.com/surge-go/fox/core/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
@@ -24,32 +27,39 @@ import (
 
 const invalidPasswordHash = "$2a$10$5mfUUdWaazU9Dlste3fPvOfW9l6p31Ox3XQduTUwipe6bJerkvAbO"
 
+const loginLogWriteTimeout = time.Second
+
 var tracer = otel.Tracer("fox-admin/internal/module/system/auth")
 
 // Service 表示系统认证业务服务。
 type Service struct {
 	db           *gorm.DB
 	manager      *authcore.Manager
+	loginLogs    *loginlog.Service
 	logger       *zap.Logger
 	refreshGroup singleflight.Group
 }
 
 // NewService 创建系统认证业务服务。
-func NewService(db *gorm.DB, manager *authcore.Manager, logger *zap.Logger) *Service {
+func NewService(db *gorm.DB, manager *authcore.Manager, loginLogs *loginlog.Service, logger *zap.Logger) *Service {
 	if db == nil {
 		panic("auth service db is nil")
 	}
 	if manager == nil {
 		panic("auth service manager is nil")
 	}
+	if loginLogs == nil {
+		panic("auth service login log service is nil")
+	}
 	if logger == nil {
 		panic("auth service logger is nil")
 	}
 
 	return &Service{
-		db:      db,
-		manager: manager,
-		logger:  logger,
+		db:        db,
+		manager:   manager,
+		loginLogs: loginLogs,
+		logger:    logger,
 	}
 }
 
@@ -57,9 +67,7 @@ func NewService(db *gorm.DB, manager *authcore.Manager, logger *zap.Logger) *Ser
 func (s *Service) Login(
 	ctx context.Context,
 	req *LoginReq,
-	deviceID string,
-	ip string,
-	userAgent string,
+	meta LoginMeta,
 ) (resp *LoginResp, err error) {
 	ctx, span := tracer.Start(ctx, "system.auth.Login")
 	span.SetAttributes(
@@ -71,12 +79,36 @@ func (s *Service) Login(
 	}()
 
 	logger := s.logger
+	username := ""
+	if req != nil {
+		username = strings.TrimSpace(req.Username)
+	}
+	meta.DeviceID = strings.TrimSpace(meta.DeviceID)
+	meta.IP = strings.TrimSpace(meta.IP)
+	meta.UserAgent = strings.TrimSpace(meta.UserAgent)
+	meta.RequestID = strings.TrimSpace(meta.RequestID)
+	meta.TraceID = strings.TrimSpace(meta.TraceID)
+	var loginUserID *int64
+	defer func() {
+		s.recordLogin(ctx, &loginlog.RecordInput{
+			RequestID:    meta.RequestID,
+			TraceID:      meta.TraceID,
+			UserID:       loginUserID,
+			Username:     username,
+			IP:           meta.IP,
+			UserAgent:    meta.UserAgent,
+			Platform:     string(authcore.PlatformWeb),
+			DeviceIDHash: hashLoginDeviceID(meta.DeviceID),
+			Status:       loginStatus(err),
+			BusinessCode: loginBusinessCode(err),
+			Message:      loginMessage(err),
+		})
+	}()
 
 	// 登录请求只接收账号和密码，客户端环境信息由 Handler 从可信请求上下文提取后传入。
 	if req == nil {
 		return nil, errcode.ErrAuthLoginReqNil
 	}
-	username := strings.TrimSpace(req.Username)
 	if username == "" {
 		return nil, errcode.ErrAuthUsernameRequired
 	}
@@ -86,12 +118,9 @@ func (s *Service) Login(
 		return nil, errcode.ErrAuthPasswordRequired
 	}
 
-	deviceID = strings.TrimSpace(deviceID)
-	ip = strings.TrimSpace(ip)
-	userAgent = strings.TrimSpace(userAgent)
 	span.SetAttributes(
 		attribute.String("auth.platform", string(authcore.PlatformWeb)),
-		attribute.Bool("auth.has_device_id", deviceID != ""),
+		attribute.Bool("auth.has_device_id", meta.DeviceID != ""),
 	)
 
 	// 只查询登录所需字段，GORM 会自动排除已经软删除的用户。
@@ -109,6 +138,8 @@ func (s *Service) Login(
 		return nil, errcode.ErrAuthUserQueryFailed.WithErr(queryErr)
 	}
 	span.SetAttributes(attribute.Int64("user.id", user.ID))
+	userID := user.ID
+	loginUserID = &userID
 
 	// 用户不存在和密码错误统一返回相同错误码，避免通过响应枚举有效账号。
 	if passwordErr := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); passwordErr != nil {
@@ -132,9 +163,9 @@ func (s *Service) Login(
 			Provider: authcore.ProviderLocal,
 		},
 		Platform:  authcore.PlatformWeb,
-		DeviceID:  deviceID,
-		IP:        ip,
-		UserAgent: userAgent,
+		DeviceID:  meta.DeviceID,
+		IP:        meta.IP,
+		UserAgent: meta.UserAgent,
 	})
 	if issueErr != nil {
 		switch {
@@ -161,6 +192,70 @@ func (s *Service) Login(
 	}
 
 	return tokenResp(pair), nil
+}
+
+func (s *Service) recordLogin(ctx context.Context, input *loginlog.RecordInput) {
+	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), loginLogWriteTimeout)
+	defer cancel()
+	if err := s.loginLogs.Record(recordCtx, input); err != nil {
+		s.logger.Error("记录用户登录日志失败", zap.String("username", input.Username), zap.Error(err))
+	}
+}
+
+// RecordInvalidLogin 记录未通过请求绑定的登录尝试。
+func (s *Service) RecordInvalidLogin(ctx context.Context, meta LoginMeta, loginErr error) {
+	meta.DeviceID = strings.TrimSpace(meta.DeviceID)
+	meta.IP = strings.TrimSpace(meta.IP)
+	meta.UserAgent = strings.TrimSpace(meta.UserAgent)
+	meta.RequestID = strings.TrimSpace(meta.RequestID)
+	meta.TraceID = strings.TrimSpace(meta.TraceID)
+	s.recordLogin(ctx, &loginlog.RecordInput{
+		RequestID:    meta.RequestID,
+		TraceID:      meta.TraceID,
+		IP:           meta.IP,
+		UserAgent:    meta.UserAgent,
+		Platform:     string(authcore.PlatformWeb),
+		DeviceIDHash: hashLoginDeviceID(meta.DeviceID),
+		Status:       enum.StatusDisabled,
+		BusinessCode: loginBusinessCode(loginErr),
+		Message:      loginMessage(loginErr),
+	})
+}
+
+func hashLoginDeviceID(deviceID string) string {
+	deviceID = strings.TrimSpace(deviceID)
+	if deviceID == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(deviceID))
+	return hex.EncodeToString(sum[:])
+}
+
+func loginStatus(err error) int {
+	if err == nil {
+		return enum.StatusEnabled
+	}
+	return enum.StatusDisabled
+}
+
+func loginBusinessCode(err error) int {
+	if err == nil {
+		return 200
+	}
+	if publicErr, ok := foxerrors.As(err); ok {
+		return publicErr.Code
+	}
+	return 500
+}
+
+func loginMessage(err error) string {
+	if err == nil {
+		return "登录成功"
+	}
+	if publicErr, ok := foxerrors.As(err); ok {
+		return publicErr.Message
+	}
+	return "登录失败"
 }
 
 // Refresh 使用 refresh token 刷新登录凭证。

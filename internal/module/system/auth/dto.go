@@ -8,6 +8,15 @@ type LoginReq struct {
 	Password string `json:"password" form:"password"`
 }
 
+// LoginMeta 表示从可信请求上下文提取的登录环境信息。
+type LoginMeta struct {
+	DeviceID  string
+	IP        string
+	UserAgent string
+	RequestID string
+	TraceID   string
+}
+
 // TokenResp 表示认证 token 响应。
 type TokenResp struct {
 	TokenType        string    `json:"token_type"`

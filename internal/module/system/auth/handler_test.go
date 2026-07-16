@@ -9,6 +9,7 @@ import (
 
 	"fox-admin/internal/errcode"
 	systemmiddleware "fox-admin/internal/middleware"
+	"fox-admin/internal/module/system/entity"
 	"fox-admin/internal/module/system/enum"
 	"fox-admin/pkg/ptr"
 
@@ -94,6 +95,33 @@ func TestHandlerProtectedRouteRequiresAccessToken(t *testing.T) {
 	resp := decodeTestResponse[any](t, rec)
 	if resp.Code != errcode.ErrAuthTokenInvalid.Code {
 		t.Fatalf("response = %#v, want token invalid", resp)
+	}
+}
+
+func TestHandlerLoginRecordsBindFailure(t *testing.T) {
+	service := newTestService(t)
+	engine := newTestAuthEngine(t, service)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/auth/login", bytes.NewBufferString(`{"username":`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(systemmiddleware.DefaultDeviceIDHeaderName, "browser-invalid")
+	req.Header.Set("User-Agent", "invalid-login-test")
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+	resp := decodeTestResponse[any](t, rec)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("response = %#v, want invalid params", resp)
+	}
+
+	var log entity.LoginLog
+	if err := service.db.Take(&log).Error; err != nil {
+		t.Fatalf("query login log: %v", err)
+	}
+	if log.Username != "" || log.UserID != nil || log.Status != enum.StatusDisabled || log.BusinessCode != http.StatusBadRequest {
+		t.Fatalf("bind failure login log = %#v", log)
+	}
+	if log.UserAgent == nil || *log.UserAgent != "invalid-login-test" || log.DeviceIDHash == nil || *log.DeviceIDHash != hashLoginDeviceID("browser-invalid") {
+		t.Fatalf("bind failure metadata = %#v", log)
 	}
 }
 

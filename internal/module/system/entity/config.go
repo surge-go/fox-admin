@@ -15,13 +15,13 @@ type Config struct {
 	// Key 是配置键，全局唯一。
 	Key string `gorm:"column:config_key;type:varchar(120);not null;uniqueIndex:uk_system_config_key,priority:1"`
 	// Value 是配置值。
-	Value *string `gorm:"column:config_value;type:text"`
+	Value string `gorm:"column:config_value;type:text;not null"`
 	// Group 是配置分组。
-	Group *string `gorm:"column:config_group;type:varchar(120);index"`
+	Group string `gorm:"column:config_group;type:varchar(120);not null;default:default;index"`
 	// ValueType 是配置值类型。
-	ValueType *string `gorm:"column:value_type;type:varchar(32);not null;default:string"`
+	ValueType string `gorm:"column:value_type;type:varchar(32);not null;default:string"`
 	// IsBuiltin 表示是否为系统内置配置。
-	IsBuiltin *bool `gorm:"column:is_builtin;not null;default:false;index"`
+	IsBuiltin bool `gorm:"column:is_builtin;not null;default:false;index"`
 	// Status 是配置状态，1 表示启用，0 表示禁用。
 	Status *int `gorm:"column:status;not null;default:1;index"`
 	// Remark 是配置备注。

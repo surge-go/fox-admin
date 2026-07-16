@@ -457,4 +457,234 @@ var (
 	ErrUserPostDisabled = errors.NewWithStatus(1227, http.StatusOK, "用户不能绑定禁用岗位")
 	// ErrRoleDeptDisabled 表示角色不能绑定禁用部门。
 	ErrRoleDeptDisabled = errors.NewWithStatus(1228, http.StatusOK, "角色不能绑定禁用部门")
+	// ErrDictTypeCreateReqNil 表示创建字典类型请求为空。
+	ErrDictTypeCreateReqNil = errors.NewWithStatus(1229, http.StatusOK, "创建字典类型参数不能为空")
+	// ErrDictTypeNameRequired 表示字典类型名称为空。
+	ErrDictTypeNameRequired = errors.NewWithStatus(1230, http.StatusOK, "字典类型名称不能为空")
+	// ErrDictTypeCodeRequired 表示字典类型编码为空。
+	ErrDictTypeCodeRequired = errors.NewWithStatus(1231, http.StatusOK, "字典类型编码不能为空")
+	// ErrDictTypeStatusInvalid 表示字典类型状态非法。
+	ErrDictTypeStatusInvalid = errors.NewWithStatus(1232, http.StatusOK, "字典类型状态只能是 0 或 1")
+	// ErrDictTypeNameExists 表示字典类型名称已存在。
+	ErrDictTypeNameExists = errors.NewWithStatus(1233, http.StatusOK, "字典类型名称已存在")
+	// ErrDictTypeCodeExists 表示字典类型编码已存在。
+	ErrDictTypeCodeExists = errors.NewWithStatus(1234, http.StatusOK, "字典类型编码已存在")
+	// ErrDictTypeNameQueryFailed 表示查询字典类型名称失败。
+	ErrDictTypeNameQueryFailed = errors.NewWithStatus(1235, http.StatusInternalServerError, "查询字典类型名称失败")
+	// ErrDictTypeCodeQueryFailed 表示查询字典类型编码失败。
+	ErrDictTypeCodeQueryFailed = errors.NewWithStatus(1236, http.StatusInternalServerError, "查询字典类型编码失败")
+	// ErrDictTypeCreateFailed 表示创建字典类型失败。
+	ErrDictTypeCreateFailed = errors.NewWithStatus(1237, http.StatusInternalServerError, "创建字典类型失败")
+	// ErrDictTypeDeleteReqNil 表示删除字典类型请求为空。
+	ErrDictTypeDeleteReqNil = errors.NewWithStatus(1238, http.StatusOK, "删除字典类型参数不能为空")
+	// ErrDictTypeIDInvalid 表示字典类型 ID 非法。
+	ErrDictTypeIDInvalid = errors.NewWithStatus(1239, http.StatusOK, "字典类型 ID 必须大于 0")
+	// ErrDictTypeIDsRequired 表示字典类型 ID 集合为空。
+	ErrDictTypeIDsRequired = errors.NewWithStatus(1240, http.StatusOK, "字典类型 ID 集合不能为空")
+	// ErrDictTypeNotFound 表示字典类型不存在。
+	ErrDictTypeNotFound = errors.NewWithStatus(1241, http.StatusOK, "字典类型不存在")
+	// ErrDictTypeDisabled 表示字典类型已禁用。
+	ErrDictTypeDisabled = errors.NewWithStatus(1242, http.StatusOK, "字典类型已禁用")
+	// ErrDictTypeHasData 表示字典类型仍有数据。
+	ErrDictTypeHasData = errors.NewWithStatus(1243, http.StatusOK, "字典类型下存在字典数据，不能删除")
+	// ErrDictTypeQueryFailed 表示查询字典类型失败。
+	ErrDictTypeQueryFailed = errors.NewWithStatus(1244, http.StatusInternalServerError, "查询字典类型失败")
+	// ErrDictTypeDataQueryFailed 表示查询字典类型数据失败。
+	ErrDictTypeDataQueryFailed = errors.NewWithStatus(1245, http.StatusInternalServerError, "查询字典类型数据失败")
+	// ErrDictTypeDeleteFailed 表示删除字典类型失败。
+	ErrDictTypeDeleteFailed = errors.NewWithStatus(1246, http.StatusInternalServerError, "删除字典类型失败")
+	// ErrDictTypeUpdateReqNil 表示更新字典类型请求为空。
+	ErrDictTypeUpdateReqNil = errors.NewWithStatus(1247, http.StatusOK, "更新字典类型参数不能为空")
+	// ErrDictTypeUpdateFailed 表示更新字典类型失败。
+	ErrDictTypeUpdateFailed = errors.NewWithStatus(1248, http.StatusInternalServerError, "更新字典类型失败")
+	// ErrDictTypeListQueryFailed 表示查询字典类型列表失败。
+	ErrDictTypeListQueryFailed = errors.NewWithStatus(1249, http.StatusInternalServerError, "查询字典类型列表失败")
+	// ErrDictTypeDetailReqNil 表示查询字典类型详情请求为空。
+	ErrDictTypeDetailReqNil = errors.NewWithStatus(1250, http.StatusOK, "查询字典类型详情参数不能为空")
+	// ErrDictTypeUpdateStatusReqNil 表示更新字典类型状态请求为空。
+	ErrDictTypeUpdateStatusReqNil = errors.NewWithStatus(1251, http.StatusOK, "更新字典类型状态参数不能为空")
+	// ErrDictTypeUpdateStatusFailed 表示更新字典类型状态失败。
+	ErrDictTypeUpdateStatusFailed = errors.NewWithStatus(1252, http.StatusInternalServerError, "更新字典类型状态失败")
+	// ErrDictDataCreateReqNil 表示创建字典数据请求为空。
+	ErrDictDataCreateReqNil = errors.NewWithStatus(1253, http.StatusOK, "创建字典数据参数不能为空")
+	// ErrDictDataTypeCodeRequired 表示字典类型编码为空。
+	ErrDictDataTypeCodeRequired = errors.NewWithStatus(1254, http.StatusOK, "字典类型编码不能为空")
+	// ErrDictDataLabelRequired 表示字典显示文本为空。
+	ErrDictDataLabelRequired = errors.NewWithStatus(1255, http.StatusOK, "字典显示文本不能为空")
+	// ErrDictDataValueRequired 表示字典值为空。
+	ErrDictDataValueRequired = errors.NewWithStatus(1256, http.StatusOK, "字典值不能为空")
+	// ErrDictDataSortInvalid 表示字典数据排序非法。
+	ErrDictDataSortInvalid = errors.NewWithStatus(1257, http.StatusOK, "字典数据排序不能小于 0")
+	// ErrDictDataStatusInvalid 表示字典数据状态非法。
+	ErrDictDataStatusInvalid = errors.NewWithStatus(1258, http.StatusOK, "字典数据状态只能是 0 或 1")
+	// ErrDictDataTypeNotFound 表示字典数据所属类型不存在。
+	ErrDictDataTypeNotFound = errors.NewWithStatus(1259, http.StatusOK, "字典数据所属类型不存在")
+	// ErrDictDataValueExists 表示同类型字典值已存在。
+	ErrDictDataValueExists = errors.NewWithStatus(1260, http.StatusOK, "同类型字典值已存在")
+	// ErrDictDataDefaultDisabled 表示禁用数据不能设为默认项。
+	ErrDictDataDefaultDisabled = errors.NewWithStatus(1261, http.StatusOK, "禁用字典数据不能设为默认项")
+	// ErrDictDataTypeQueryFailed 表示查询字典数据所属类型失败。
+	ErrDictDataTypeQueryFailed = errors.NewWithStatus(1262, http.StatusInternalServerError, "查询字典数据所属类型失败")
+	// ErrDictDataValueQueryFailed 表示查询字典值失败。
+	ErrDictDataValueQueryFailed = errors.NewWithStatus(1263, http.StatusInternalServerError, "查询字典值失败")
+	// ErrDictDataCreateFailed 表示创建字典数据失败。
+	ErrDictDataCreateFailed = errors.NewWithStatus(1264, http.StatusInternalServerError, "创建字典数据失败")
+	// ErrDictDataDeleteReqNil 表示删除字典数据请求为空。
+	ErrDictDataDeleteReqNil = errors.NewWithStatus(1265, http.StatusOK, "删除字典数据参数不能为空")
+	// ErrDictDataIDInvalid 表示字典数据 ID 非法。
+	ErrDictDataIDInvalid = errors.NewWithStatus(1266, http.StatusOK, "字典数据 ID 必须大于 0")
+	// ErrDictDataIDsRequired 表示字典数据 ID 集合为空。
+	ErrDictDataIDsRequired = errors.NewWithStatus(1267, http.StatusOK, "字典数据 ID 集合不能为空")
+	// ErrDictDataNotFound 表示字典数据不存在。
+	ErrDictDataNotFound = errors.NewWithStatus(1268, http.StatusOK, "字典数据不存在")
+	// ErrDictDataQueryFailed 表示查询字典数据失败。
+	ErrDictDataQueryFailed = errors.NewWithStatus(1269, http.StatusInternalServerError, "查询字典数据失败")
+	// ErrDictDataDeleteFailed 表示删除字典数据失败。
+	ErrDictDataDeleteFailed = errors.NewWithStatus(1270, http.StatusInternalServerError, "删除字典数据失败")
+	// ErrDictDataUpdateReqNil 表示更新字典数据请求为空。
+	ErrDictDataUpdateReqNil = errors.NewWithStatus(1271, http.StatusOK, "更新字典数据参数不能为空")
+	// ErrDictDataUpdateFailed 表示更新字典数据失败。
+	ErrDictDataUpdateFailed = errors.NewWithStatus(1272, http.StatusInternalServerError, "更新字典数据失败")
+	// ErrDictDataListQueryFailed 表示查询字典数据列表失败。
+	ErrDictDataListQueryFailed = errors.NewWithStatus(1273, http.StatusInternalServerError, "查询字典数据列表失败")
+	// ErrDictDataDetailReqNil 表示查询字典数据详情请求为空。
+	ErrDictDataDetailReqNil = errors.NewWithStatus(1274, http.StatusOK, "查询字典数据详情参数不能为空")
+	// ErrDictDataUpdateStatusReqNil 表示更新字典数据状态请求为空。
+	ErrDictDataUpdateStatusReqNil = errors.NewWithStatus(1275, http.StatusOK, "更新字典数据状态参数不能为空")
+	// ErrDictDataUpdateStatusFailed 表示更新字典数据状态失败。
+	ErrDictDataUpdateStatusFailed = errors.NewWithStatus(1276, http.StatusInternalServerError, "更新字典数据状态失败")
+	// ErrDictValuesReqNil 表示查询字典值请求为空。
+	ErrDictValuesReqNil = errors.NewWithStatus(1277, http.StatusOK, "查询字典值参数不能为空")
+	// ErrDictValuesQueryFailed 表示查询字典值失败。
+	ErrDictValuesQueryFailed = errors.NewWithStatus(1278, http.StatusInternalServerError, "查询字典值失败")
+	// ErrUserAssignPostsReqNil 表示分配用户岗位请求参数为空。
+	ErrUserAssignPostsReqNil = errors.NewWithStatus(1279, http.StatusOK, "分配用户岗位参数不能为空")
+	// ErrUserAssignPostsFailed 表示分配用户岗位失败。
+	ErrUserAssignPostsFailed = errors.NewWithStatus(1280, http.StatusInternalServerError, "分配用户岗位失败")
+	// ErrConfigCreateReqNil 表示创建配置请求为空。
+	ErrConfigCreateReqNil = errors.NewWithStatus(1281, http.StatusOK, "创建配置参数不能为空")
+	// ErrConfigNameRequired 表示配置名称为空。
+	ErrConfigNameRequired = errors.NewWithStatus(1282, http.StatusOK, "配置名称不能为空")
+	// ErrConfigKeyRequired 表示配置键为空。
+	ErrConfigKeyRequired = errors.NewWithStatus(1283, http.StatusOK, "配置键不能为空")
+	// ErrConfigKeyInvalid 表示配置键格式非法。
+	ErrConfigKeyInvalid = errors.NewWithStatus(1284, http.StatusOK, "配置键格式非法")
+	// ErrConfigValueTypeInvalid 表示配置值类型非法。
+	ErrConfigValueTypeInvalid = errors.NewWithStatus(1286, http.StatusOK, "配置值类型非法")
+	// ErrConfigValueInvalid 表示配置值与声明类型不匹配。
+	ErrConfigValueInvalid = errors.NewWithStatus(1287, http.StatusOK, "配置值与配置类型不匹配")
+	// ErrConfigStatusInvalid 表示配置状态非法。
+	ErrConfigStatusInvalid = errors.NewWithStatus(1288, http.StatusOK, "配置状态只能是 0 或 1")
+	// ErrConfigKeyExists 表示配置键已存在。
+	ErrConfigKeyExists = errors.NewWithStatus(1289, http.StatusOK, "配置键已存在")
+	// ErrConfigKeyQueryFailed 表示查询配置键失败。
+	ErrConfigKeyQueryFailed = errors.NewWithStatus(1290, http.StatusInternalServerError, "查询配置键失败")
+	// ErrConfigCreateFailed 表示创建配置失败。
+	ErrConfigCreateFailed = errors.NewWithStatus(1291, http.StatusInternalServerError, "创建配置失败")
+	// ErrConfigDeleteReqNil 表示删除配置请求为空。
+	ErrConfigDeleteReqNil = errors.NewWithStatus(1292, http.StatusOK, "删除配置参数不能为空")
+	// ErrConfigIDInvalid 表示配置 ID 非法。
+	ErrConfigIDInvalid = errors.NewWithStatus(1293, http.StatusOK, "配置 ID 必须大于 0")
+	// ErrConfigIDsRequired 表示配置 ID 集合为空。
+	ErrConfigIDsRequired = errors.NewWithStatus(1294, http.StatusOK, "配置 ID 集合不能为空")
+	// ErrConfigNotFound 表示配置不存在或未启用。
+	ErrConfigNotFound = errors.NewWithStatus(1295, http.StatusOK, "配置不存在")
+	// ErrConfigBuiltinDelete 表示内置配置不能删除。
+	ErrConfigBuiltinDelete = errors.NewWithStatus(1296, http.StatusOK, "系统内置配置不能删除")
+	// ErrConfigQueryFailed 表示查询配置失败。
+	ErrConfigQueryFailed = errors.NewWithStatus(1297, http.StatusInternalServerError, "查询配置失败")
+	// ErrConfigDeleteFailed 表示删除配置失败。
+	ErrConfigDeleteFailed = errors.NewWithStatus(1298, http.StatusInternalServerError, "删除配置失败")
+	// ErrConfigUpdateReqNil 表示更新配置请求为空。
+	ErrConfigUpdateReqNil = errors.NewWithStatus(1299, http.StatusOK, "更新配置参数不能为空")
+	// ErrConfigUpdateFailed 表示更新配置失败。
+	ErrConfigUpdateFailed = errors.NewWithStatus(1300, http.StatusInternalServerError, "更新配置失败")
+	// ErrConfigListQueryFailed 表示查询配置列表失败。
+	ErrConfigListQueryFailed = errors.NewWithStatus(1301, http.StatusInternalServerError, "查询配置列表失败")
+	// ErrConfigDetailReqNil 表示查询配置详情请求为空。
+	ErrConfigDetailReqNil = errors.NewWithStatus(1302, http.StatusOK, "查询配置详情参数不能为空")
+	// ErrConfigUpdateStatusReqNil 表示更新配置状态请求为空。
+	ErrConfigUpdateStatusReqNil = errors.NewWithStatus(1303, http.StatusOK, "更新配置状态参数不能为空")
+	// ErrConfigUpdateStatusFailed 表示更新配置状态失败。
+	ErrConfigUpdateStatusFailed = errors.NewWithStatus(1304, http.StatusInternalServerError, "更新配置状态失败")
+	// ErrConfigValueTypeMismatch 表示类型化读取方法与配置类型不匹配。
+	ErrConfigValueTypeMismatch = errors.NewWithStatus(1305, http.StatusInternalServerError, "配置读取类型不匹配")
+	// ErrLoginLogRecordReqNil 表示登录日志写入参数为空。
+	ErrLoginLogRecordReqNil = errors.NewWithStatus(1306, http.StatusInternalServerError, "登录日志参数不能为空")
+	// ErrLoginLogRecordFailed 表示写入登录日志失败。
+	ErrLoginLogRecordFailed = errors.NewWithStatus(1307, http.StatusInternalServerError, "写入登录日志失败")
+	// ErrLoginLogStatusInvalid 表示登录日志状态非法。
+	ErrLoginLogStatusInvalid = errors.NewWithStatus(1308, http.StatusOK, "登录状态只能是 0 或 1")
+	// ErrLoginLogTimeInvalid 表示登录日志时间条件非法。
+	ErrLoginLogTimeInvalid = errors.NewWithStatus(1309, http.StatusOK, "登录日志时间格式非法")
+	// ErrLoginLogTimeRangeInvalid 表示登录日志时间范围非法。
+	ErrLoginLogTimeRangeInvalid = errors.NewWithStatus(1310, http.StatusOK, "登录日志开始时间不能晚于结束时间")
+	// ErrLoginLogListQueryFailed 表示查询登录日志列表失败。
+	ErrLoginLogListQueryFailed = errors.NewWithStatus(1311, http.StatusInternalServerError, "查询登录日志列表失败")
+	// ErrLoginLogDetailReqNil 表示查询登录日志详情参数为空。
+	ErrLoginLogDetailReqNil = errors.NewWithStatus(1312, http.StatusOK, "查询登录日志详情参数不能为空")
+	// ErrLoginLogIDInvalid 表示登录日志 ID 非法。
+	ErrLoginLogIDInvalid = errors.NewWithStatus(1313, http.StatusOK, "登录日志 ID 必须大于 0")
+	// ErrLoginLogNotFound 表示登录日志不存在。
+	ErrLoginLogNotFound = errors.NewWithStatus(1314, http.StatusOK, "登录日志不存在")
+	// ErrLoginLogQueryFailed 表示查询登录日志失败。
+	ErrLoginLogQueryFailed = errors.NewWithStatus(1315, http.StatusInternalServerError, "查询登录日志失败")
+	// ErrLoginLogDeleteReqNil 表示删除登录日志参数为空。
+	ErrLoginLogDeleteReqNil = errors.NewWithStatus(1316, http.StatusOK, "删除登录日志参数不能为空")
+	// ErrLoginLogIDsRequired 表示登录日志 ID 集合为空。
+	ErrLoginLogIDsRequired = errors.NewWithStatus(1317, http.StatusOK, "登录日志 ID 集合不能为空")
+	// ErrLoginLogDeleteFailed 表示删除登录日志失败。
+	ErrLoginLogDeleteFailed = errors.NewWithStatus(1318, http.StatusInternalServerError, "删除登录日志失败")
+	// ErrLoginLogCleanReqNil 表示清理登录日志参数为空。
+	ErrLoginLogCleanReqNil = errors.NewWithStatus(1319, http.StatusOK, "清理登录日志参数不能为空")
+	// ErrLoginLogCleanBeforeRequired 表示清理截止时间为空。
+	ErrLoginLogCleanBeforeRequired = errors.NewWithStatus(1320, http.StatusOK, "清理截止时间不能为空")
+	// ErrLoginLogCleanBeforeFuture 表示清理截止时间不早于当前时间。
+	ErrLoginLogCleanBeforeFuture = errors.NewWithStatus(1321, http.StatusOK, "清理截止时间必须早于当前时间")
+	// ErrLoginLogCleanFailed 表示清理登录日志失败。
+	ErrLoginLogCleanFailed = errors.NewWithStatus(1322, http.StatusInternalServerError, "清理登录日志失败")
+	// ErrOperLogRecordReqNil 表示操作日志写入参数为空。
+	ErrOperLogRecordReqNil = errors.NewWithStatus(1323, http.StatusInternalServerError, "操作日志参数不能为空")
+	// ErrOperLogModuleRequired 表示操作日志模块为空。
+	ErrOperLogModuleRequired = errors.NewWithStatus(1324, http.StatusInternalServerError, "操作日志模块不能为空")
+	// ErrOperLogActionRequired 表示操作日志动作为空。
+	ErrOperLogActionRequired = errors.NewWithStatus(1325, http.StatusInternalServerError, "操作日志动作不能为空")
+	// ErrOperLogMethodRequired 表示操作日志请求方法为空。
+	ErrOperLogMethodRequired = errors.NewWithStatus(1326, http.StatusInternalServerError, "操作日志请求方法不能为空")
+	// ErrOperLogPathRequired 表示操作日志请求路径为空。
+	ErrOperLogPathRequired = errors.NewWithStatus(1327, http.StatusInternalServerError, "操作日志请求路径不能为空")
+	// ErrOperLogRecordFailed 表示写入操作日志失败。
+	ErrOperLogRecordFailed = errors.NewWithStatus(1328, http.StatusInternalServerError, "写入操作日志失败")
+	// ErrOperLogStatusInvalid 表示操作日志状态非法。
+	ErrOperLogStatusInvalid = errors.NewWithStatus(1329, http.StatusOK, "操作状态只能是 0 或 1")
+	// ErrOperLogTimeInvalid 表示操作日志时间条件非法。
+	ErrOperLogTimeInvalid = errors.NewWithStatus(1330, http.StatusOK, "操作日志时间格式非法")
+	// ErrOperLogTimeRangeInvalid 表示操作日志时间范围非法。
+	ErrOperLogTimeRangeInvalid = errors.NewWithStatus(1331, http.StatusOK, "操作日志开始时间不能晚于结束时间")
+	// ErrOperLogListQueryFailed 表示查询操作日志列表失败。
+	ErrOperLogListQueryFailed = errors.NewWithStatus(1332, http.StatusInternalServerError, "查询操作日志列表失败")
+	// ErrOperLogDetailReqNil 表示查询操作日志详情参数为空。
+	ErrOperLogDetailReqNil = errors.NewWithStatus(1333, http.StatusOK, "查询操作日志详情参数不能为空")
+	// ErrOperLogIDInvalid 表示操作日志 ID 非法。
+	ErrOperLogIDInvalid = errors.NewWithStatus(1334, http.StatusOK, "操作日志 ID 必须大于 0")
+	// ErrOperLogNotFound 表示操作日志不存在。
+	ErrOperLogNotFound = errors.NewWithStatus(1335, http.StatusOK, "操作日志不存在")
+	// ErrOperLogQueryFailed 表示查询操作日志失败。
+	ErrOperLogQueryFailed = errors.NewWithStatus(1336, http.StatusInternalServerError, "查询操作日志失败")
+	// ErrOperLogDeleteReqNil 表示删除操作日志参数为空。
+	ErrOperLogDeleteReqNil = errors.NewWithStatus(1337, http.StatusOK, "删除操作日志参数不能为空")
+	// ErrOperLogIDsRequired 表示操作日志 ID 集合为空。
+	ErrOperLogIDsRequired = errors.NewWithStatus(1338, http.StatusOK, "操作日志 ID 集合不能为空")
+	// ErrOperLogDeleteFailed 表示删除操作日志失败。
+	ErrOperLogDeleteFailed = errors.NewWithStatus(1339, http.StatusInternalServerError, "删除操作日志失败")
+	// ErrOperLogCleanReqNil 表示清理操作日志参数为空。
+	ErrOperLogCleanReqNil = errors.NewWithStatus(1340, http.StatusOK, "清理操作日志参数不能为空")
+	// ErrOperLogCleanBeforeRequired 表示操作日志清理截止时间为空。
+	ErrOperLogCleanBeforeRequired = errors.NewWithStatus(1341, http.StatusOK, "清理截止时间不能为空")
+	// ErrOperLogCleanBeforeFuture 表示操作日志清理截止时间不早于当前时间。
+	ErrOperLogCleanBeforeFuture = errors.NewWithStatus(1342, http.StatusOK, "清理截止时间必须早于当前时间")
+	// ErrOperLogCleanFailed 表示清理操作日志失败。
+	ErrOperLogCleanFailed = errors.NewWithStatus(1343, http.StatusInternalServerError, "清理操作日志失败")
+	// ErrAuthForbidden 表示当前登录用户无权执行该操作。
+	ErrAuthForbidden = errors.NewWithStatus(1344, http.StatusForbidden, "无权执行该操作")
 )

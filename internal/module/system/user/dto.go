@@ -123,3 +123,9 @@ type AssignRolesReq struct {
 	ID      int64   `json:"id" form:"id"`
 	RoleIDs []int64 `json:"role_ids" form:"role_ids"`
 }
+
+// AssignPostsReq 表示分配用户岗位请求。
+type AssignPostsReq struct {
+	ID      int64   `json:"id" form:"id"`
+	PostIDs []int64 `json:"post_ids" form:"post_ids"`
+}

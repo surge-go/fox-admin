@@ -12,7 +12,7 @@ type DictType struct {
 	ID int64 `gorm:"column:id;primaryKey;autoIncrement"`
 	// Name 是字典类型名称。
 	Name string `gorm:"column:name;type:varchar(120);not null;uniqueIndex:uk_system_dict_type_name,priority:1"`
-	// Code 是字典类型编码。
+	// Code 是字典类型编码，创建后不可修改。
 	Code string `gorm:"column:code;type:varchar(120);not null;uniqueIndex:uk_system_dict_type_code,priority:1"`
 	// Status 是字典类型状态，1 表示启用，0 表示禁用。
 	Status *int `gorm:"column:status;not null;default:1;index"`

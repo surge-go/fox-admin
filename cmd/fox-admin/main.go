@@ -53,7 +53,8 @@ func main() {
 			"/api/v1/system/auth/refresh",
 		},
 	}))
-	system.RegisterRoutes(v1, app.DB(), authManager, app.Logger())
+	closeSystem := system.RegisterRoutes(v1, app.DB(), authManager, app.Logger())
+	defer closeSystem()
 	registerSwaggerRoutes(app.Engine())
 	if err = app.Run(); err != nil {
 		log.Fatalf("run application: %v", err)

@@ -8,6 +8,7 @@ import (
 	"fox-admin/internal/errcode"
 	"fox-admin/internal/module/system/entity"
 	"fox-admin/internal/module/system/enum"
+	"fox-admin/internal/module/system/loginlog"
 	authcore "fox-admin/pkg/auth"
 	"fox-admin/pkg/ptr"
 
@@ -35,7 +36,7 @@ func TestServiceLoginValidatesRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := service.Login(context.Background(), tt.req, "", "127.0.0.1", "test")
+			_, err := service.Login(context.Background(), tt.req, LoginMeta{IP: "127.0.0.1", UserAgent: "test"})
 			if !foxerrors.IsCode(err, tt.want) {
 				t.Fatalf("Login() error = %v, want code %d", err, tt.want)
 			}
@@ -61,7 +62,7 @@ func TestServiceLoginReturnsSameErrorForInvalidCredentials(t *testing.T) {
 			_, err := service.Login(context.Background(), &LoginReq{
 				Username: tt.username,
 				Password: tt.password,
-			}, "", "127.0.0.1", "test")
+			}, LoginMeta{IP: "127.0.0.1", UserAgent: "test"})
 			if !foxerrors.IsCode(err, errcode.ErrAuthCredentialsInvalid.Code) {
 				t.Fatalf("Login() error = %v, want credentials invalid", err)
 			}
@@ -76,7 +77,7 @@ func TestServiceLoginRejectsDisabledUserAfterPasswordCheck(t *testing.T) {
 	_, err := service.Login(context.Background(), &LoginReq{
 		Username: "disabled",
 		Password: "password",
-	}, "", "127.0.0.1", "test")
+	}, LoginMeta{IP: "127.0.0.1", UserAgent: "test"})
 	if !foxerrors.IsCode(err, errcode.ErrAuthUserDisabled.Code) {
 		t.Fatalf("Login() error = %v, want user disabled", err)
 	}
@@ -89,7 +90,7 @@ func TestServiceLoginIssuesTokenPair(t *testing.T) {
 	resp, err := service.Login(context.Background(), &LoginReq{
 		Username: " admin ",
 		Password: " password ",
-	}, " browser-1 ", " 127.0.0.1 ", " test-agent ")
+	}, LoginMeta{DeviceID: " browser-1 ", IP: " 127.0.0.1 ", UserAgent: " test-agent "})
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
@@ -106,6 +107,38 @@ func TestServiceLoginIssuesTokenPair(t *testing.T) {
 	}
 	if claims.SubjectID != user.ID || claims.SubjectType != authcore.SubjectAdmin || claims.Platform != authcore.PlatformWeb {
 		t.Fatalf("claims = %#v, want admin user %d on web", claims, user.ID)
+	}
+}
+
+func TestServiceLoginRecordsSuccessAndFailure(t *testing.T) {
+	service := newTestService(t)
+	user := createTestUser(t, service.db, "admin", "password", enum.StatusEnabled)
+	meta := LoginMeta{
+		DeviceID: "browser-1", IP: "127.0.0.1", UserAgent: "test-agent",
+		RequestID: "request-1", TraceID: "trace-1",
+	}
+	if _, err := service.Login(context.Background(), &LoginReq{Username: "admin", Password: "wrong"}, meta); !foxerrors.IsCode(err, errcode.ErrAuthCredentialsInvalid.Code) {
+		t.Fatalf("failed Login() error = %v", err)
+	}
+	if _, err := service.Login(context.Background(), &LoginReq{Username: "admin", Password: "password"}, meta); err != nil {
+		t.Fatalf("successful Login() error = %v", err)
+	}
+
+	var logs []entity.LoginLog
+	if err := service.db.Order("id ASC").Find(&logs).Error; err != nil {
+		t.Fatalf("query login logs: %v", err)
+	}
+	if len(logs) != 2 {
+		t.Fatalf("login log count = %d, want 2", len(logs))
+	}
+	if logs[0].UserID == nil || *logs[0].UserID != user.ID || logs[0].Status != enum.StatusDisabled || logs[0].BusinessCode != errcode.ErrAuthCredentialsInvalid.Code {
+		t.Fatalf("failed login log = %#v", logs[0])
+	}
+	if logs[1].UserID == nil || *logs[1].UserID != user.ID || logs[1].Status != enum.StatusEnabled || logs[1].BusinessCode != 200 {
+		t.Fatalf("successful login log = %#v", logs[1])
+	}
+	if logs[1].RequestID == nil || *logs[1].RequestID != "request-1" || logs[1].TraceID == nil || *logs[1].TraceID != "trace-1" || logs[1].DeviceIDHash == nil || *logs[1].DeviceIDHash != hashLoginDeviceID("browser-1") {
+		t.Fatalf("login metadata = %#v", logs[1])
 	}
 }
 
@@ -405,6 +438,7 @@ func newTestService(t *testing.T) *Service {
 		&entity.UserRole{},
 		&entity.RoleMenu{},
 		&entity.RolePermission{},
+		&entity.LoginLog{},
 	); err != nil {
 		t.Fatalf("migrate auth entities: %v", err)
 	}
@@ -421,7 +455,7 @@ func newTestService(t *testing.T) *Service {
 		t.Fatalf("new auth manager: %v", err)
 	}
 
-	return NewService(db, manager, zap.NewNop())
+	return NewService(db, manager, loginlog.NewService(db, zap.NewNop()), zap.NewNop())
 }
 
 func createTestUser(t *testing.T, db *gorm.DB, username string, password string, status int) *entity.User {

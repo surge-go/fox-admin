@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"errors"
+	"net/http"
+
 	"fox-admin/internal/errcode"
 	"fox-admin/internal/middleware"
 	"fox-admin/pkg/auth"
@@ -63,21 +66,38 @@ func (h *Handler) Login(c *fox.Context) {
 	var req LoginReq
 	if err := c.Bind(&req); err != nil {
 		h.logger.Warn("用户登录请求绑定失败", zap.Error(err))
+		h.service.RecordInvalidLogin(c.StdContext(), loginMeta(c), loginBindError(c, err))
 		return
 	}
 
 	resp, err := h.service.Login(
 		c.StdContext(),
 		&req,
-		c.GetHeader(middleware.DefaultDeviceIDHeaderName),
-		c.ClientIP(),
-		c.GetHeader("User-Agent"),
+		loginMeta(c),
 	)
 	if err != nil {
 		c.Fail(err)
 		return
 	}
 	c.Ok(resp)
+}
+
+func loginBindError(c *fox.Context, bindErr error) error {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(bindErr, &maxBytesErr) {
+		return c.Errors().ErrPayloadTooLarge()
+	}
+	return c.Errors().ErrInvalidParams()
+}
+
+func loginMeta(c *fox.Context) LoginMeta {
+	return LoginMeta{
+		DeviceID:  c.GetHeader(middleware.DefaultDeviceIDHeaderName),
+		IP:        c.ClientIP(),
+		UserAgent: c.GetHeader("User-Agent"),
+		RequestID: c.RequestID(),
+		TraceID:   c.TraceID(),
+	}
 }
 
 // Refresh 刷新登录凭证。

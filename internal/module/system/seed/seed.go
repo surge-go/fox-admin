@@ -43,8 +43,66 @@ func Seed(db *gorm.DB) error {
 		if err = seedRoleMenus(tx, role.ID, menus); err != nil {
 			return err
 		}
-		return seedRolePermissions(tx, role.ID, permissions)
+		if err = seedRolePermissions(tx, role.ID, permissions); err != nil {
+			return err
+		}
+		return seedConfigs(tx)
 	})
+}
+
+func seedConfigs(tx *gorm.DB) error {
+	configs := []entity.Config{
+		{
+			Name:      "系统名称",
+			Key:       "system.site_name",
+			Value:     "Fox Admin",
+			Group:     "system",
+			ValueType: enum.ConfigValueTypeString,
+			IsBuiltin: true,
+			Status:    ptr.Of(enum.StatusEnabled),
+			Remark:    ptr.Of("后台管理系统显示名称"),
+		},
+		{
+			Name:      "系统 Logo",
+			Key:       "system.logo_url",
+			Value:     "/assets/logo.svg",
+			Group:     "system",
+			ValueType: enum.ConfigValueTypeString,
+			IsBuiltin: true,
+			Status:    ptr.Of(enum.StatusEnabled),
+			Remark:    ptr.Of("后台管理系统 Logo 地址"),
+		},
+		{
+			Name:      "版权信息",
+			Key:       "system.copyright",
+			Value:     "© 2026 Fox Admin",
+			Group:     "system",
+			ValueType: enum.ConfigValueTypeString,
+			IsBuiltin: true,
+			Status:    ptr.Of(enum.StatusEnabled),
+			Remark:    ptr.Of("后台管理系统版权信息"),
+		},
+	}
+
+	for i := range configs {
+		var existing entity.Config
+		err := tx.Where("config_key = ?", configs[i].Key).Take(&existing).Error
+		if err == nil {
+			if !existing.IsBuiltin {
+				if updateErr := tx.Model(&existing).Update("is_builtin", true).Error; updateErr != nil {
+					return updateErr
+				}
+			}
+			continue
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if createErr := tx.Create(&configs[i]).Error; createErr != nil {
+			return createErr
+		}
+	}
+	return nil
 }
 
 func seedAdminRole(tx *gorm.DB) (entity.Role, error) {

@@ -44,6 +44,7 @@ func (h *Handler) RegisterRoutes(group *fox.RouteGroup) {
 	user.POST("/update-status", h.UpdateStatus)
 	user.POST("/reset-password", h.ResetPassword)
 	user.POST("/assign-roles", h.AssignRoles)
+	user.POST("/assign-posts", h.AssignPosts)
 }
 
 // Create 创建用户。
@@ -240,6 +241,31 @@ func (h *Handler) AssignRoles(c *fox.Context) {
 	}
 
 	if err := h.service.AssignRoles(c.StdContext(), &req); err != nil {
+		c.Fail(err)
+		return
+	}
+	c.Ok(nil)
+}
+
+// AssignPosts 分配用户岗位。
+//
+// @Summary 分配用户岗位
+// @Description 替换用户绑定的岗位集合
+// @Tags 系统用户
+// @Accept json
+// @Produce json
+// @Param request body AssignPostsReq true "分配用户岗位请求"
+// @Success 200 {object} map[string]interface{} "分配成功"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /api/v1/system/user/assign-posts [post]
+func (h *Handler) AssignPosts(c *fox.Context) {
+	var req AssignPostsReq
+	if err := c.Bind(&req); err != nil {
+		h.logger.Warn("分配用户岗位请求绑定失败", zap.Error(err))
+		return
+	}
+
+	if err := h.service.AssignPosts(c.StdContext(), &req); err != nil {
 		c.Fail(err)
 		return
 	}
